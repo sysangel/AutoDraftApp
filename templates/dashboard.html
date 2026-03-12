@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Email Draft App{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Dashboard</h1>
+  <div class="header-actions">
+    <span class="last-updated">Last loaded: {{ now.strftime('%Y-%m-%d %H:%M') }} UTC</span>
+    <form method="POST" action="/poll" style="display:inline;">
+      <button type="submit" class="btn btn-primary">⟳ Poll Now</button>
+    </form>
+  </div>
+</div>
+
+<div class="stats-bar">
+  <div class="stat-card">
+    <span class="stat-number">{{ enriched | length }}</span>
+    <span class="stat-label">Recent Messages</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-number">{{ enriched | selectattr('message.status', 'equalto', 'complete') | list | length }}</span>
+    <span class="stat-label">Complete</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-number">{{ enriched | selectattr('message.status', 'equalto', 'error') | list | length }}</span>
+    <span class="stat-label">Errors</span>
+  </div>
+</div>
+
+{% if enriched %}
+<div class="message-list">
+  {% for item in enriched %}
+  {% set msg = item.message %}
+  {% set draft = item.draft %}
+  <div class="message-card {% if msg.status == 'error' %}card-error{% elif msg.status == 'complete' %}card-complete{% else %}card-pending{% endif %}">
+    <div class="card-header">
+      <div class="card-meta">
+        <span class="from-name">{{ msg.from_name or msg.from_email or 'Unknown sender' }}</span>
+        <span class="from-email">&lt;{{ msg.from_email or '' }}&gt;</span>
+      </div>
+      <div class="card-right">
+        <span class="status-badge status-{{ msg.status }}">{{ msg.status }}</span>
+        <span class="received-date">
+          {% if msg.received_at %}{{ msg.received_at.strftime('%b %d, %Y %H:%M') }}{% endif %}
+        </span>
+      </div>
+    </div>
+
+    <div class="card-subject">
+      <strong>{{ msg.subject or '(no subject)' }}</strong>
+    </div>
+
+    {% if draft %}
+    <div class="card-draft">
+      <div class="draft-label">Generated Draft:</div>
+      <div class="draft-text">{{ draft.draft_text }}</div>
+      {% if draft.model_name %}
+      <div class="draft-meta">Model: {{ draft.model_name }} | Prompt: {{ draft.prompt_version }}</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if msg.error_message %}
+    <div class="error-box">⚠ {{ msg.error_message }}</div>
+    {% endif %}
+
+    <div class="card-footer">
+      <a href="/messages/{{ msg.id }}" class="btn btn-sm">View Details</a>
+      <span class="card-flags">
+        {% if msg.draft_appended %}✓ Draft saved{% endif %}
+        {% if msg.is_read_marked %} · ✓ Marked read{% endif %}
+      </span>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <p>No messages processed yet. Click <strong>Poll Now</strong> to check your inbox,
+  or wait for the background poller to run (every 2 minutes).</p>
+</div>
+{% endif %}
+{% endblock %}

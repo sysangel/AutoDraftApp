@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Message #{{ message.id }} — Email Draft App{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Message #{{ message.id }}</h1>
+  <a href="/messages" class="btn">← All Messages</a>
+</div>
+
+<div class="detail-grid">
+
+  <!-- Original Email Info -->
+  <div class="detail-section">
+    <h2>Original Email</h2>
+    <table class="detail-table">
+      <tr><th>Status</th><td><span class="status-badge status-{{ message.status }}">{{ message.status }}</span></td></tr>
+      <tr><th>From</th><td>{{ message.from_name or '' }} &lt;{{ message.from_email or '' }}&gt;</td></tr>
+      <tr><th>Subject</th><td>{{ message.subject or '(no subject)' }}</td></tr>
+      <tr><th>Received</th><td>{% if message.received_at %}{{ message.received_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}{% endif %}</td></tr>
+      <tr><th>Message-ID</th><td class="mono small-text">{{ message.message_id }}</td></tr>
+      <tr><th>IMAP UID</th><td class="mono">{{ message.uid or '—' }}</td></tr>
+      <tr><th>Draft Appended</th><td>{% if message.draft_appended %}✓ Yes{% else %}No{% endif %}</td></tr>
+      <tr><th>Marked Read</th><td>{% if message.is_read_marked %}✓ Yes{% else %}No{% endif %}</td></tr>
+      <tr><th>Recorded At</th><td>{{ message.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') if message.created_at else '—' }}</td></tr>
+    </table>
+
+    {% if message.error_message %}
+    <div class="error-box" style="margin-top:1rem;">
+      <strong>Error:</strong> {{ message.error_message }}
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Original Body -->
+  <div class="detail-section">
+    <h2>Original Body</h2>
+    <pre class="body-pre">{{ message.body_text or '(empty)' }}</pre>
+  </div>
+
+  <!-- Cleaned Text -->
+  <div class="detail-section">
+    <h2>Cleaned Body (sent to AI)</h2>
+    <pre class="body-pre cleaned">{{ message.cleaned_text or '(empty)' }}</pre>
+  </div>
+
+  <!-- Generated Draft -->
+  {% if draft %}
+  <div class="detail-section highlight-section">
+    <h2>Generated Draft Reply</h2>
+    <div class="draft-meta-line">
+      Model: <strong>{{ draft.model_name or '—' }}</strong> |
+      Prompt version: <strong>{{ draft.prompt_version }}</strong> |
+      Created: {{ draft.created_at.strftime('%Y-%m-%d %H:%M UTC') if draft.created_at else '—' }}
+    </div>
+    <pre class="body-pre draft">{{ draft.draft_text }}</pre>
+    <p class="note">
+      This draft has been saved to your mailbox Drafts folder. Open your email client to review and send it manually.
+    </p>
+  </div>
+  {% else %}
+  <div class="detail-section">
+    <h2>Generated Draft</h2>
+    <p class="empty-state">No draft was generated for this message.</p>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

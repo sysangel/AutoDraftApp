@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Email Draft App{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">📬 Email Draft App</div>
+    <div class="nav-links">
+      <a href="/">Dashboard</a>
+      <a href="/messages">All Messages</a>
+      <a href="/health">Health</a>
+    </div>
+  </nav>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <p>This app reads email and creates drafts. It never sends email.</p>
+  </footer>
+</body>
+</html>
