@@ -1,34 +1,22 @@
 @echo off
 echo ============================================
-echo  AutoDraft App - Building Installer
+echo  draft.ai - Build Installer
 echo ============================================
 echo.
 
-REM Make sure we're in the right directory
 cd /d %~dp0
 
-REM Activate venv
 call venv\Scripts\activate
 
-REM Install PyInstaller if needed
 pip install pyinstaller -q
 
-echo Building setup wizard exe...
-pyinstaller --onefile ^
-  --name "AutoDraftSetup" ^
-  --icon NONE ^
-  --console ^
-  setup_wizard.py
-
-echo.
-echo Building main app exe...
+echo Building draft.ai executable...
 pyinstaller --onedir ^
-  --name "AutoDraftApp" ^
+  --name "DraftAI" ^
   --icon NONE ^
-  --console ^
+  --noconsole ^
   --add-data "templates;templates" ^
   --add-data "static;static" ^
-  --add-data "requirements.txt;." ^
   --hidden-import "uvicorn.logging" ^
   --hidden-import "uvicorn.loops" ^
   --hidden-import "uvicorn.loops.auto" ^
@@ -40,12 +28,45 @@ pyinstaller --onedir ^
   --hidden-import "uvicorn.lifespan.on" ^
   --hidden-import "apscheduler.schedulers.background" ^
   --hidden-import "apscheduler.executors.pool" ^
-  app.py
+  --hidden-import "sqlalchemy.dialects.sqlite" ^
+  main_app.py
+
+if errorlevel 1 (
+  echo.
+  echo ERROR: PyInstaller build failed.
+  pause
+  exit /b 1
+)
+
+echo.
+echo PyInstaller build complete: dist\DraftAI\DraftAI.exe
+echo.
+
+REM --- Optional: compile Inno Setup installer ---
+REM Looks for ISCC.exe in the default Inno Setup install location.
+set ISCC="%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
+if not exist %ISCC% set ISCC="%ProgramFiles%\Inno Setup 6\ISCC.exe"
+
+if exist %ISCC% (
+  echo Building installer with Inno Setup...
+  mkdir installer_output 2>nul
+  %ISCC% draft_ai_installer.iss
+  if errorlevel 1 (
+    echo WARNING: Inno Setup compilation failed.
+  ) else (
+    echo Installer created: installer_output\DraftAI_Setup.exe
+  )
+) else (
+  echo Inno Setup not found - skipping installer packaging.
+  echo To create a single-file installer, install Inno Setup 6 from:
+  echo   https://jrsoftware.org/isinfo.php
+  echo Then re-run this script.
+)
 
 echo.
 echo ============================================
-echo  Done! Check the dist\ folder.
-echo  - dist\AutoDraftSetup.exe  = run first
-echo  - dist\AutoDraftApp\       = main app
+echo  Done!
+echo  - dist\DraftAI\DraftAI.exe    portable app
+echo  - installer_output\DraftAI_Setup.exe  (if Inno Setup was found)
 echo ============================================
 pause

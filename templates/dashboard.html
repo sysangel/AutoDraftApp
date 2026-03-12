@@ -1,7 +1,13 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — Email Draft App{% endblock %}
+{% block title %}Dashboard — draft.ai{% endblock %}
 
 {% block content %}
+{% if request.query_params.get('polled') %}
+<div class="alert-success">Poll completed — inbox checked for new messages.</div>
+{% elif request.query_params.get('poll_error') %}
+<div class="alert-error">Poll failed — check your mailbox settings and try again.</div>
+{% endif %}
+
 <div class="page-header">
   <h1>Dashboard</h1>
   <div class="header-actions">

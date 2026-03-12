@@ -22,7 +22,7 @@ from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -84,7 +84,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Email Draft App",
+    title="draft.ai",
     description="Reads emails, drafts replies, never sends.",
     lifespan=lifespan,
 )
@@ -348,15 +348,14 @@ async def message_detail(request: Request, message_id: int, db: Session = Depend
 @app.post("/poll")
 async def manual_poll(request: Request):
     """
-    Manually trigger a poll. Useful for testing or on-demand runs.
-    Returns a simple status message.
+    Manually trigger a poll, then redirect back to the dashboard.
     """
     try:
         run_poll_job()
-        return {"status": "ok", "message": "Poll completed successfully."}
+        return RedirectResponse(url="/?polled=1", status_code=303)
     except Exception as exc:
         logger.error("Manual poll failed: %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Poll failed: {str(exc)}")
+        return RedirectResponse(url="/?poll_error=1", status_code=303)
 
 
 @app.get("/settings", response_class=HTMLResponse)
