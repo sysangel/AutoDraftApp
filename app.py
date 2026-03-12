@@ -12,6 +12,7 @@ What this app does NOT do:
   - Send email (no SMTP, ever)
   - Auto-send anything
 """
+
 from dotenv import load_dotenv
 load_dotenv()
 import logging
@@ -36,7 +37,7 @@ from imap_service import (
     poll_mailbox,
 )
 from ai_service import generate_draft_reply, PROMPT_VERSION
-from models import Draft, Mailbox, Message
+from models import Draft, Mailbox, Message, Settings
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -235,10 +236,14 @@ def _process_single_message(parsed: dict, mailbox: Mailbox, conn, db: Session):
         db.commit()
 
         # Step 2: Generate AI draft
+        user_settings = db.query(Settings).filter(
+            Settings.mailbox_id == mailbox.id
+        ).first()
         draft_text, model_name = generate_draft_reply(
             sender=parsed.get("from_email", ""),
             subject=parsed.get("subject", ""),
             cleaned_body=cleaned,
+            settings=user_settings,
         )
         message.status = "drafted"
         db.commit()
@@ -352,6 +357,54 @@ async def manual_poll(request: Request):
     except Exception as exc:
         logger.error("Manual poll failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Poll failed: {str(exc)}")
+
+
+@app.get("/settings", response_class=HTMLResponse)
+async def get_settings(request: Request, db: Session = Depends(get_db)):
+    """Settings page — configure AI prompt, signature, tone, etc."""
+    mailbox = db.query(Mailbox).first()
+    settings = db.query(Settings).first()
+    return templates.TemplateResponse(
+        "settings.html",
+        {"request": request, "mailbox": mailbox, "settings": settings},
+    )
+
+
+@app.post("/settings", response_class=HTMLResponse)
+async def save_settings(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Save settings from the form."""
+    form = await request.form()
+    mailbox = db.query(Mailbox).first()
+    if not mailbox:
+        raise HTTPException(status_code=400, detail="No mailbox configured.")
+
+    settings = db.query(Settings).filter(Settings.mailbox_id == mailbox.id).first()
+    if not settings:
+        settings = Settings(mailbox_id=mailbox.id)
+        db.add(settings)
+
+    settings.sender_name = form.get("sender_name", "").strip() or None
+    settings.company_name = form.get("company_name", "").strip() or None
+    settings.tone = form.get("tone", "professional")
+    settings.custom_instructions = form.get("custom_instructions", "").strip() or None
+    settings.signature = form.get("signature", "").strip() or None
+    settings.footer_link_label = form.get("footer_link_label", "").strip() or None
+    settings.footer_link = form.get("footer_link", "").strip() or None
+
+    db.commit()
+
+    return templates.TemplateResponse(
+        "settings.html",
+        {
+            "request": request,
+            "mailbox": mailbox,
+            "settings": settings,
+            "saved": True,
+        },
+    )
 
 
 @app.get("/health")

@@ -26,6 +26,7 @@ def generate_draft_reply(
     sender: str,
     subject: str,
     cleaned_body: str,
+    settings=None,
 ) -> str:
     """
     Generate a plain-text email reply draft using OpenAI.
@@ -44,17 +45,46 @@ def generate_draft_reply(
     model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     client = get_openai_client()
 
+    # Build dynamic instructions from user settings
+    tone = "professional"
+    custom_block = ""
+    signature_block = ""
+    footer_block = ""
+    identity_block = ""
+
+    if settings:
+        if settings.tone:
+            tone = settings.tone
+        if settings.sender_name or settings.company_name:
+            identity_block = (
+                f"\nYou are drafting on behalf of "
+                f"{settings.sender_name or ''}"
+                f"{' at ' + settings.company_name if settings.company_name else ''}."
+            )
+        if settings.custom_instructions:
+            custom_block = f"\nAdditional instructions: {settings.custom_instructions}"
+        if settings.footer_link and settings.footer_link_label:
+            footer_block = (
+                f"\nIf relevant, you may include this link naturally in the reply: "
+                f"{settings.footer_link_label}: {settings.footer_link}"
+            )
+        if settings.signature:
+            signature_block = f"\n\nAppend this exact signature at the end of every reply:\n{settings.signature}"
+
     system_prompt = (
-        "You are a professional email assistant. "
-        "Your job is to draft a helpful, concise, and polite reply to an inbound email. "
-        "\n\nRules:"
-        "\n- Output ONLY the plain text body of the reply email."
-        "\n- Do NOT include a subject line."
-        "\n- Do NOT use markdown, bullet points, or any formatting symbols."
-        "\n- Do NOT make up facts, promises, or claims not supported by the inbound email."
-        "\n- If important information is missing to give a full answer, politely ask for clarification."
-        "\n- Keep the tone professional, neutral, and concise."
-        "\n- Do not add a sign-off or signature; the user will add those manually."
+        f"You are a professional email assistant. "
+        f"Your job is to draft a helpful, {tone}, and polite reply to an inbound email."
+        f"{identity_block}"
+        f"\n\nRules:"
+        f"\n- Output ONLY the plain text body of the reply email."
+        f"\n- Do NOT include a subject line."
+        f"\n- Do NOT use markdown, bullet points, or any formatting symbols."
+        f"\n- Do NOT make up facts, promises, or claims not supported by the inbound email."
+        f"\n- If important information is missing, politely ask for clarification."
+        f"\n- Keep the tone {tone} and concise."
+        f"{custom_block}"
+        f"{footer_block}"
+        f"{signature_block}"
     )
 
     user_prompt = (

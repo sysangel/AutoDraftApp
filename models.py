@@ -65,6 +65,32 @@ class Message(Base):
     drafts = relationship("Draft", back_populates="message")
 
 
+class Settings(Base):
+    """
+    User-configurable prompt settings.
+    One row per mailbox — controls how the AI drafts replies.
+    """
+    __tablename__ = "settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mailbox_id = Column(Integer, ForeignKey("mailboxes.id"), nullable=False)
+    # Signature appended to every draft
+    signature = Column(Text, nullable=True)
+    # Custom instructions injected into the AI prompt
+    custom_instructions = Column(Text, nullable=True)
+    # Tone: professional | friendly | formal | concise
+    tone = Column(String, default="professional")
+    # Optional footer link (e.g. calendar booking, website)
+    footer_link = Column(String, nullable=True)
+    footer_link_label = Column(String, nullable=True)
+    # Your name / company name for the AI to reference
+    sender_name = Column(String, nullable=True)
+    company_name = Column(String, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    mailbox = relationship("Mailbox", backref="settings")
+
+
 class Draft(Base):
     """
     Stores the AI-generated draft text for a given message.
