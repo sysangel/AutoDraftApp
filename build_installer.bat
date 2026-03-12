@@ -1,20 +1,24 @@
 @echo off
+setlocal
 echo ============================================
-echo  draft.ai - Build Installer
+echo  draft.ai - Build Windows Installer
 echo ============================================
 echo.
 
 cd /d %~dp0
-
 call venv\Scripts\activate
 
-pip install pyinstaller -q
+echo Installing/updating build tools...
+pip install pyinstaller pywebview pywin32 -q
 
-echo Building draft.ai executable...
+echo.
+echo Building draft.ai with PyInstaller...
+
 pyinstaller --onedir ^
   --name "DraftAI" ^
   --icon NONE ^
   --noconsole ^
+  --collect-all webview ^
   --add-data "templates;templates" ^
   --add-data "static;static" ^
   --hidden-import "uvicorn.logging" ^
@@ -29,6 +33,7 @@ pyinstaller --onedir ^
   --hidden-import "apscheduler.schedulers.background" ^
   --hidden-import "apscheduler.executors.pool" ^
   --hidden-import "sqlalchemy.dialects.sqlite" ^
+  --hidden-import "setup_app" ^
   main_app.py
 
 if errorlevel 1 (
@@ -42,31 +47,31 @@ echo.
 echo PyInstaller build complete: dist\DraftAI\DraftAI.exe
 echo.
 
-REM --- Optional: compile Inno Setup installer ---
-REM Looks for ISCC.exe in the default Inno Setup install location.
-set ISCC="%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
-if not exist %ISCC% set ISCC="%ProgramFiles%\Inno Setup 6\ISCC.exe"
+REM --- Compile Inno Setup installer if available ---
+set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
+if not exist "%ISCC%" set "ISCC=%ProgramFiles%\Inno Setup 6\ISCC.exe"
 
-if exist %ISCC% (
-  echo Building installer with Inno Setup...
+if exist "%ISCC%" (
+  echo Compiling installer with Inno Setup...
   mkdir installer_output 2>nul
-  %ISCC% draft_ai_installer.iss
+  "%ISCC%" draft_ai_installer.iss
   if errorlevel 1 (
     echo WARNING: Inno Setup compilation failed.
   ) else (
-    echo Installer created: installer_output\DraftAI_Setup.exe
+    echo.
+    echo ============================================
+    echo  INSTALLER READY:
+    echo  installer_output\DraftAI_Setup.exe
+    echo ============================================
   )
 ) else (
-  echo Inno Setup not found - skipping installer packaging.
-  echo To create a single-file installer, install Inno Setup 6 from:
-  echo   https://jrsoftware.org/isinfo.php
-  echo Then re-run this script.
+  echo.
+  echo Inno Setup not found.
+  echo Download from: https://jrsoftware.org/isinfo.php
+  echo Then re-run this script to produce DraftAI_Setup.exe
+  echo.
+  echo Portable build is at: dist\DraftAI\DraftAI.exe
 )
 
 echo.
-echo ============================================
-echo  Done!
-echo  - dist\DraftAI\DraftAI.exe    portable app
-echo  - installer_output\DraftAI_Setup.exe  (if Inno Setup was found)
-echo ============================================
 pause

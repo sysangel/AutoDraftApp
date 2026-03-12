@@ -1,44 +1,99 @@
-; draft.ai — Inno Setup installer script
-; Requires Inno Setup 6+  (https://jrsoftware.org/isinfo.php)
-; Run build_installer.bat first to produce dist\DraftAI\ via PyInstaller,
-; then compile this script with Inno Setup Compiler (ISCC.exe).
+; draft.ai — Inno Setup Installer Script
+; Requires Inno Setup 6+ from https://jrsoftware.org/isinfo.php
+; Run build_installer.bat first to produce dist\DraftAI\ via PyInstaller.
 
-#define MyAppName      "draft.ai"
-#define MyAppVersion   "1.0.0"
-#define MyAppPublisher "draft.ai"
-#define MyAppExeName   "DraftAI.exe"
-#define DistDir        "dist\DraftAI"
+#define AppName      "draft.ai"
+#define AppVersion   "1.0.0"
+#define AppPublisher "draft.ai"
+#define AppExeName   "DraftAI.exe"
+#define DistDir      "dist\DraftAI"
 
 [Setup]
-AppId={{A3B2C1D0-EEFF-4321-8765-ABCDEF012345}
-AppName={#MyAppName}
-AppVersion={#MyAppVersion}
-AppPublisher={#MyAppPublisher}
-DefaultDirName={autopf}\{#MyAppName}
-DefaultGroupName={#MyAppName}
+AppId={{B7C4D2E1-FFAA-4567-9876-ABCDEF123456}
+AppName={#AppName}
+AppVersion={#AppVersion}
+AppPublisher={#AppPublisher}
+AppPublisherURL=https://github.com/sysangel/AutoDraftApp
+AppSupportURL=https://github.com/sysangel/AutoDraftApp
+VersionInfoVersion={#AppVersion}
+DefaultDirName={autopf}\{#AppName}
+DefaultGroupName={#AppName}
 AllowNoIcons=yes
 OutputDir=installer_output
 OutputBaseFilename=DraftAI_Setup
-Compression=lzma2
+Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
+WizardSizePercent=120
 PrivilegesRequired=lowest
 DisableProgramGroupPage=yes
-UninstallDisplayName={#MyAppName}
+UninstallDisplayName={#AppName}
+UninstallDisplayIcon={app}\{#AppExeName}
+; Require Windows 10+
+MinVersion=10.0
+SetupIconFile=NONE
+ShowLanguageDialog=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional icons:"; Flags: unchecked
+Name: "desktopicon";  Description: "Create a &desktop shortcut";          GroupDescription: "Shortcuts:"; Flags: unchecked
+Name: "startupentry"; Description: "Launch draft.ai automatically on login"; GroupDescription: "Startup:";   Flags: unchecked
 
 [Files]
-; Include everything PyInstaller produced in dist\DraftAI\
 Source: "{#DistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\{#MyAppName}";  Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+; Start Menu
+Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"
+; Desktop (optional)
+Name: "{autodesktop}\{#AppName}";  Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
+; Uninstall entry
+Name: "{autoprograms}\{#AppName}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
+
+[Registry]
+; Auto-start on login (optional task)
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
+  ValueType: string; ValueName: "{#AppName}"; ValueData: """{app}\{#AppExeName}"""; \
+  Flags: uninsdeletevalue; Tasks: startupentry
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+; Offer to launch after install
+Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName} now"; \
+  Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+; Clean up user data directory on uninstall only if user confirms
+; (We leave %APPDATA%\draft.ai so data is preserved by default)
+Type: dirifempty; Name: "{app}"
+
+[Code]
+// Check for Microsoft Edge WebView2 Runtime.
+// WebView2 ships with Windows 11 and Windows 10 21H2+.
+// For older Windows 10, we prompt the user to install it.
+function IsWebView2Installed(): Boolean;
+var
+  ver: String;
+begin
+  // Check machine-wide install
+  Result := RegQueryStringValue(HKLM,
+    'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
+    'pv', ver) and (ver <> '0.0.0.0') and (ver <> '');
+  if not Result then
+    // Check per-user install
+    Result := RegQueryStringValue(HKCU,
+      'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
+      'pv', ver) and (ver <> '0.0.0.0') and (ver <> '');
+end;
+
+procedure InitializeWizard();
+begin
+  if not IsWebView2Installed() then
+    MsgBox(
+      'draft.ai requires Microsoft Edge WebView2, which does not appear to be installed on this PC.' + #13#10 + #13#10 +
+      'Please download and install it from:' + #13#10 +
+      'https://go.microsoft.com/fwlink/p/?LinkId=2124703' + #13#10 + #13#10 +
+      'After installing WebView2, run this installer again.',
+      mbInformation, MB_OK);
+end;

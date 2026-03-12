@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git pull:*)",
+      "Bash(venv/Scripts/pip show:*)",
+      "Bash(venv/Scripts/python -c \"from openai import OpenAI; c = OpenAI\\(api_key='test-key'\\); print\\('OK'\\)\" 2>&1)"
+    ]
+  }
+}

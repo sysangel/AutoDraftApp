@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>draft.ai — Setup</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: #f1f5f9;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0f172a;
+}
+
+.wizard {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.13), 0 1px 4px rgba(0,0,0,0.06);
+  width: 560px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Header */
+.wizard-header {
+  padding: 2rem 2rem 1.5rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+.logo {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.03em;
+  margin-bottom: 1.5rem;
+}
+.logo span { color: #2563eb; }
+
+/* Step indicator */
+.steps {
+  display: flex;
+  align-items: center;
+}
+.step-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+.step-circle {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  border: 2px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.775rem;
+  font-weight: 700;
+  color: #94a3b8;
+  transition: all 0.25s;
+}
+.step-item.active .step-circle {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(37,99,235,0.15);
+}
+.step-item.done .step-circle {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #fff;
+}
+.step-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.step-item.active .step-label { color: #2563eb; }
+.step-item.done .step-label { color: #16a34a; }
+.step-connector {
+  flex: 1;
+  height: 2px;
+  background: #e2e8f0;
+  margin: 0 0.5rem;
+  margin-bottom: 1.4rem;
+  transition: background 0.25s;
+}
+.step-connector.done { background: #16a34a; }
+
+/* Step content */
+.step-body {
+  display: none;
+  padding: 2rem;
+  animation: fadeIn 0.2s ease;
+}
+.step-body.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+.step-body h2 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-bottom: 0.4rem;
+  color: #0f172a;
+}
+.step-body .desc {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin-bottom: 1.5rem;
+  line-height: 1.55;
+}
+
+/* Forms */
+.form-group { margin-bottom: 0.95rem; }
+.form-group label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 0.35rem;
+}
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 0.575rem 0.875rem;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: #0f172a;
+  font-family: inherit;
+  background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.form-group select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2.25rem;
+}
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+}
+.form-group input::placeholder { color: #9ca3af; }
+
+.row-2col {
+  display: grid;
+  grid-template-columns: 1fr 90px;
+  gap: 0.75rem;
+}
+
+.quick-hosts {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.95rem;
+  flex-wrap: wrap;
+}
+.quick-hosts span {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+.quick-btn {
+  padding: 0.2rem 0.65rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  background: #f8fafc;
+  font-size: 0.75rem;
+  color: #475569;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  transition: all 0.1s;
+}
+.quick-btn:hover { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1.1rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+  transition: all 0.15s;
+  text-decoration: none;
+}
+.btn-primary { background: #2563eb; color: #fff; }
+.btn-primary:hover { background: #1d4ed8; }
+.btn-primary:active { background: #1e40af; transform: scale(0.98); }
+.btn-outline { background: #fff; color: #2563eb; border: 1.5px solid #bfdbfe; }
+.btn-outline:hover { background: #eff6ff; border-color: #2563eb; }
+.btn-ghost { background: transparent; color: #64748b; border: 1.5px solid #e2e8f0; }
+.btn-ghost:hover { background: #f8fafc; border-color: #94a3b8; }
+.btn-lg { padding: 0.65rem 1.5rem; font-size: 0.95rem; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Test row */
+.test-row {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  margin-bottom: 1.5rem;
+}
+.test-status {
+  font-size: 0.825rem;
+  font-weight: 500;
+  min-width: 0;
+}
+.s-ok { color: #16a34a; }
+.s-err { color: #dc2626; }
+.s-busy { color: #64748b; }
+
+/* Nav row */
+.nav-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 1.25rem;
+  border-top: 1px solid #f1f5f9;
+  margin-top: 0.5rem;
+}
+
+/* Summary */
+.summary-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 0.875rem;
+}
+.summary-row:last-child { border-bottom: none; }
+.s-key { color: #64748b; font-weight: 500; }
+.s-val { color: #0f172a; font-weight: 600; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Success icon */
+.success-icon {
+  width: 60px;
+  height: 60px;
+  background: #dcfce7;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.75rem;
+  margin-bottom: 1.25rem;
+}
+
+/* Saving overlay */
+.overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(4px);
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 1rem;
+  z-index: 999;
+  border-radius: 16px;
+}
+.overlay.show { display: flex; }
+.spinner {
+  width: 36px; height: 36px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.overlay p { color: #374151; font-size: 0.95rem; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="wizard">
+  <!-- Header -->
+  <div class="wizard-header">
+    <div class="logo">draft<span>.</span>ai</div>
+    <div class="steps">
+      <div class="step-item active" id="sdot-1">
+        <div class="step-circle">1</div>
+        <div class="step-label">Email</div>
+      </div>
+      <div class="step-connector" id="sline-1"></div>
+      <div class="step-item" id="sdot-2">
+        <div class="step-circle">2</div>
+        <div class="step-label">AI</div>
+      </div>
+      <div class="step-connector" id="sline-2"></div>
+      <div class="step-item" id="sdot-3">
+        <div class="step-circle">3</div>
+        <div class="step-label">Done</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 1: Email -->
+  <div class="step-body active" id="step-1">
+    <h2>Connect your inbox</h2>
+    <p class="desc">draft.ai reads your emails via IMAP to generate draft replies. It never sends anything — only reads and creates drafts.</p>
+
+    <div class="form-group">
+      <label>Email address</label>
+      <input type="email" id="f-email" placeholder="you@example.com" autocomplete="email"/>
+    </div>
+
+    <div class="quick-hosts">
+      <span>Quick fill:</span>
+      <button class="quick-btn" onclick="fillHost('gmail')">Gmail</button>
+      <button class="quick-btn" onclick="fillHost('outlook')">Outlook / 365</button>
+      <button class="quick-btn" onclick="fillHost('zoho')">Zoho</button>
+    </div>
+
+    <div class="row-2col">
+      <div class="form-group">
+        <label>IMAP server</label>
+        <input type="text" id="f-host" placeholder="imap.gmail.com"/>
+      </div>
+      <div class="form-group">
+        <label>Port</label>
+        <input type="number" id="f-port" value="993"/>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Password / App password</label>
+      <input type="password" id="f-password" placeholder="Your email password or app-specific password" autocomplete="current-password"/>
+    </div>
+
+    <div class="form-group">
+      <label>Drafts folder</label>
+      <select id="f-drafts">
+        <option value="Drafts">Drafts</option>
+        <option value="INBOX.Drafts">INBOX.Drafts (Zoho)</option>
+        <option value="Draft">Draft</option>
+        <option value="[Gmail]/Drafts">[Gmail]/Drafts</option>
+      </select>
+    </div>
+
+    <div class="test-row">
+      <button class="btn btn-outline" onclick="testIMAP()">Test connection</button>
+      <span class="test-status" id="imap-status"></span>
+    </div>
+
+    <div class="nav-row">
+      <span></span>
+      <button class="btn btn-primary" onclick="goTo(2)">Next &rarr;</button>
+    </div>
+  </div>
+
+  <!-- Step 2: OpenAI -->
+  <div class="step-body" id="step-2">
+    <h2>AI configuration</h2>
+    <p class="desc">draft.ai uses the OpenAI API to generate replies. You need an API key from <strong>platform.openai.com/api-keys</strong>. This is separate from a ChatGPT Plus subscription and requires billing enabled.</p>
+
+    <div class="form-group">
+      <label>OpenAI API key</label>
+      <input type="password" id="f-apikey" placeholder="sk-..." autocomplete="off"/>
+    </div>
+
+    <div class="form-group">
+      <label>Model</label>
+      <select id="f-model">
+        <option value="gpt-4o-mini" selected>gpt-4o-mini — fast &amp; affordable (recommended)</option>
+        <option value="gpt-4o">gpt-4o — more capable, higher cost</option>
+        <option value="gpt-3.5-turbo">gpt-3.5-turbo — legacy</option>
+      </select>
+    </div>
+
+    <div class="test-row">
+      <button class="btn btn-outline" onclick="testOpenAI()">Verify key</button>
+      <span class="test-status" id="openai-status"></span>
+    </div>
+
+    <div class="nav-row">
+      <button class="btn btn-ghost" onclick="goTo(1)">&larr; Back</button>
+      <button class="btn btn-primary" onclick="goTo(3)">Review &rarr;</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Confirm -->
+  <div class="step-body" id="step-3">
+    <div class="success-icon">&#10003;</div>
+    <h2>Ready to launch</h2>
+    <p class="desc">Everything looks good. Review your settings below, then launch draft.ai.</p>
+
+    <div class="summary-card" id="summary"></div>
+
+    <div class="nav-row">
+      <button class="btn btn-ghost" onclick="goTo(2)">&larr; Back</button>
+      <button class="btn btn-primary btn-lg" onclick="saveAndLaunch()">Launch draft.ai &rarr;</button>
+    </div>
+  </div>
+
+  <!-- Saving overlay -->
+  <div class="overlay" id="overlay">
+    <div class="spinner"></div>
+    <p>Saving configuration&hellip;</p>
+  </div>
+</div>
+
+<script>
+let current = 1;
+
+const hosts = {
+  gmail:   { host: 'imap.gmail.com',           port: '993', drafts: '[Gmail]/Drafts' },
+  outlook: { host: 'outlook.office365.com',     port: '993', drafts: 'Drafts' },
+  zoho:    { host: 'imappro.zoho.com',          port: '993', drafts: 'INBOX.Drafts' },
+};
+
+function fillHost(provider) {
+  const h = hosts[provider];
+  if (!h) return;
+  document.getElementById('f-host').value = h.host;
+  document.getElementById('f-port').value = h.port;
+  const sel = document.getElementById('f-drafts');
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === h.drafts) { sel.selectedIndex = i; break; }
+  }
+}
+
+function setStatus(id, ok, msg) {
+  const el = document.getElementById(id);
+  el.textContent = (ok ? '✓ ' : '✗ ') + msg;
+  el.className = 'test-status ' + (ok ? 's-ok' : 's-err');
+}
+
+function clearStatus(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = 'test-status s-busy';
+}
+
+function showStep(n) {
+  document.querySelectorAll('.step-body').forEach(el => el.classList.remove('active'));
+  document.getElementById('step-' + n).classList.add('active');
+
+  for (let i = 1; i <= 3; i++) {
+    const dot = document.getElementById('sdot-' + i);
+    dot.classList.remove('active', 'done');
+    if (i === n) dot.classList.add('active');
+    else if (i < n) dot.classList.add('done');
+  }
+  for (let i = 1; i <= 2; i++) {
+    const line = document.getElementById('sline-' + i);
+    line.classList.toggle('done', i < n);
+  }
+
+  if (n === 3) buildSummary();
+  current = n;
+}
+
+function goTo(n) {
+  if (n > current) {
+    if (current === 1 && !validateStep1()) return;
+    if (current === 2 && !validateStep2()) return;
+  }
+  showStep(n);
+}
+
+function validateStep1() {
+  const email = document.getElementById('f-email').value.trim();
+  const host  = document.getElementById('f-host').value.trim();
+  const pass  = document.getElementById('f-password').value;
+  if (!email || !host || !pass) {
+    alert('Please fill in your email address, IMAP server, and password.');
+    return false;
+  }
+  if (!email.includes('@')) {
+    alert('Please enter a valid email address.');
+    return false;
+  }
+  return true;
+}
+
+function validateStep2() {
+  const key = document.getElementById('f-apikey').value.trim();
+  if (!key) {
+    alert('Please enter your OpenAI API key.');
+    return false;
+  }
+  return true;
+}
+
+async function testIMAP() {
+  if (!validateStep1()) return;
+  clearStatus('imap-status', 'Testing connection…');
+  try {
+    const r = await fetch('/setup/test-imap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email:     document.getElementById('f-email').value.trim(),
+        imap_host: document.getElementById('f-host').value.trim(),
+        imap_port: document.getElementById('f-port').value,
+        password:  document.getElementById('f-password').value,
+      }),
+    });
+    const d = await r.json();
+    setStatus('imap-status', d.ok, d.message);
+  } catch (e) {
+    setStatus('imap-status', false, 'Request failed — is the app running?');
+  }
+}
+
+async function testOpenAI() {
+  const key = document.getElementById('f-apikey').value.trim();
+  if (!key) { alert('Please enter your API key first.'); return; }
+  clearStatus('openai-status', 'Verifying…');
+  try {
+    const r = await fetch('/setup/test-openai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: key,
+        model:   document.getElementById('f-model').value,
+      }),
+    });
+    const d = await r.json();
+    setStatus('openai-status', d.ok, d.message);
+  } catch (e) {
+    setStatus('openai-status', false, 'Request failed.');
+  }
+}
+
+function buildSummary() {
+  const email  = document.getElementById('f-email').value.trim();
+  const host   = document.getElementById('f-host').value.trim();
+  const port   = document.getElementById('f-port').value;
+  const drafts = document.getElementById('f-drafts').value;
+  const model  = document.getElementById('f-model').value;
+  const key    = document.getElementById('f-apikey').value.trim();
+  const masked = key.length > 10 ? key.slice(0, 7) + '…' + key.slice(-4) : '(set)';
+
+  document.getElementById('summary').innerHTML = [
+    ['Email',         email],
+    ['IMAP Server',   host + ':' + port],
+    ['Drafts Folder', drafts],
+    ['AI Model',      model],
+    ['API Key',       masked],
+  ].map(([k, v]) =>
+    `<div class="summary-row"><span class="s-key">${k}</span><span class="s-val" title="${v}">${v}</span></div>`
+  ).join('');
+}
+
+async function saveAndLaunch() {
+  const overlay = document.getElementById('overlay');
+  overlay.classList.add('show');
+
+  const payload = {
+    email:         document.getElementById('f-email').value.trim(),
+    imap_host:     document.getElementById('f-host').value.trim(),
+    imap_port:     document.getElementById('f-port').value,
+    password:      document.getElementById('f-password').value,
+    drafts_folder: document.getElementById('f-drafts').value,
+    openai_key:    document.getElementById('f-apikey').value.trim(),
+    openai_model:  document.getElementById('f-model').value,
+  };
+
+  try {
+    const r = await fetch('/setup/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      if (window.pywebview) {
+        pywebview.api.close_setup();
+      } else {
+        overlay.innerHTML = `
+          <div style="text-align:center;padding:2rem">
+            <div style="font-size:2.5rem;margin-bottom:1rem">✓</div>
+            <h2 style="margin-bottom:.5rem">Setup complete!</h2>
+            <p style="color:#64748b;font-size:.9rem">You can close this window.</p>
+          </div>`;
+      }
+    } else {
+      overlay.classList.remove('show');
+      alert('Could not save configuration. Please try again.');
+    }
+  } catch (e) {
+    overlay.classList.remove('show');
+    alert('Error: ' + e.message);
+  }
+}
+</script>
+</body>
+</html>

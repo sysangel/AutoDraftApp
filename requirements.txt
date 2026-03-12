@@ -6,3 +6,5 @@ python-multipart==0.0.9
 apscheduler==3.10.4
 openai>=1.52.0
 python-dotenv==1.0.1
+pywebview>=4.4.1
+pywin32>=306
