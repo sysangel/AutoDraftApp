@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import threading
 import traceback
 from html import unescape
@@ -48,6 +49,7 @@ from imap_service import (
 from ai_service import generate_draft_reply, PROMPT_VERSION
 from models import Conversation, ContactInsight, DomainInsight, Draft, DraftFeedback, Mailbox, Message, Settings
 from provider_presets import CATEGORY_OPTIONS, PROVIDER_PRESETS
+from secret_store import clear_secret, get_secret, has_secret, set_secret
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -80,7 +82,6 @@ def _configure_logging():
 _configure_logging()
 logger = logging.getLogger(__name__)
 _append_startup_trace("app.py imported")
-
 MAX_UNREAD_FETCH = 75
 MAX_STORED_BODY_CHARS = 20000
 MAX_STORED_CLEANED_CHARS = 12000
@@ -88,6 +89,7 @@ MESSAGE_PAGE_SIZE = 40
 REVIEW_PAGE_SIZE = 30
 MAX_IMPORTED_SIGNATURE_HTML_CHARS = 50000
 MAX_IMPORTED_SIGNATURE_TEXT_CHARS = 8000
+ADMIN_CSRF_TOKEN = secrets.token_urlsafe(32)
 
 # ---------------------------------------------------------------------------
 # Scheduler
@@ -120,6 +122,8 @@ async def lifespan(app: FastAPI):
         init_db()
         _append_startup_trace("database initialization complete")
         logger.info("Database initialized.")
+        _load_runtime_secrets_into_env()
+        _append_startup_trace("runtime secrets loaded into environment")
 
         _append_startup_trace("starting mailbox seed from environment")
         _seed_mailbox_from_env()
@@ -156,7 +160,6 @@ app = FastAPI(
 )
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
 _STOPWORDS = {
     "the", "and", "for", "that", "with", "this", "from", "have", "your", "about",
     "would", "could", "there", "their", "please", "thanks", "regards", "hello",
@@ -325,6 +328,37 @@ def _truncate_for_storage(value: str | None, max_chars: int) -> str | None:
     if len(value) <= max_chars:
         return value
     return value[:max_chars]
+
+
+def _load_runtime_secrets_into_env():
+    mailbox_password = get_secret("mailbox_password")
+    openai_api_key = get_secret("openai_api_key")
+    if mailbox_password:
+        os.environ["MAILBOX_PASSWORD"] = mailbox_password
+    else:
+        os.environ.pop("MAILBOX_PASSWORD", None)
+    if openai_api_key:
+        os.environ["OPENAI_API_KEY"] = openai_api_key
+    else:
+        os.environ.pop("OPENAI_API_KEY", None)
+
+
+def _csrf_token() -> str:
+    return ADMIN_CSRF_TOKEN
+
+
+def _ensure_admin_token(request: Request, form=None):
+    provided = request.headers.get("X-Admin-Token")
+    if not provided and form is not None:
+        provided = form.get("csrf_token")
+    if not provided:
+        raise HTTPException(status_code=403, detail="Missing admin token.")
+    if not secrets.compare_digest(provided, ADMIN_CSRF_TOKEN):
+        raise HTTPException(status_code=403, detail="Invalid admin token.")
+
+
+templates = Jinja2Templates(directory="templates")
+templates.env.globals["csrf_token"] = _csrf_token
 
 
 class _SignatureHTMLToTextParser(HTMLParser):
@@ -611,14 +645,23 @@ def _read_runtime_config() -> dict:
         "imap_host": _get("IMAP_HOST"),
         "imap_port": _get("IMAP_PORT", "993"),
         "imap_username": _get("IMAP_USERNAME"),
-        "mailbox_password": _get("MAILBOX_PASSWORD"),
         "source_folder": _get("SOURCE_FOLDER", "INBOX"),
         "drafts_folder": _get("DRAFTS_FOLDER", "Drafts"),
         "polling_enabled": _get("POLLING_ENABLED", "1"),
         "run_in_background": _get("RUN_IN_BACKGROUND", "0"),
-        "openai_api_key": _get("OPENAI_API_KEY"),
         "openai_model": _get("OPENAI_MODEL", "gpt-4o-mini"),
+        "has_saved_mailbox_password": has_secret("mailbox_password"),
+        "has_saved_openai_api_key": has_secret("openai_api_key"),
     }
+
+
+def _config_for_ui(config: dict) -> dict:
+    safe = dict(config)
+    safe.pop("mailbox_password", None)
+    safe.pop("openai_api_key", None)
+    safe["has_saved_mailbox_password"] = bool(config.get("has_saved_mailbox_password") or has_secret("mailbox_password"))
+    safe["has_saved_openai_api_key"] = bool(config.get("has_saved_openai_api_key") or has_secret("openai_api_key"))
+    return safe
 
 
 def _write_runtime_config(config: dict):
@@ -637,14 +680,12 @@ def _write_runtime_config(config: dict):
         f"IMAP_HOST={config['imap_host']}",
         f"IMAP_PORT={config['imap_port']}",
         f"IMAP_USERNAME={config['imap_username']}",
-        f"MAILBOX_PASSWORD={config['mailbox_password']}",
         f"SOURCE_FOLDER={config.get('source_folder', 'INBOX')}",
         f"DRAFTS_FOLDER={config['drafts_folder']}",
         f"POLLING_ENABLED={config.get('polling_enabled', '1')}",
         f"RUN_IN_BACKGROUND={config.get('run_in_background', '0')}",
         "",
         "# OpenAI",
-        f"OPENAI_API_KEY={config['openai_api_key']}",
         f"OPENAI_MODEL={config['openai_model']}",
         "",
         "# Database",
@@ -1173,6 +1214,8 @@ async def manual_poll(request: Request, db: Session = Depends(get_db)):
     """
     Manually trigger a poll, then redirect back to the dashboard.
     """
+    form = await request.form()
+    _ensure_admin_token(request, form)
     active_mailbox = db.query(Mailbox).filter(Mailbox.is_active == True).first()
     if not active_mailbox:
         return RedirectResponse(url="/?poll_disabled=1", status_code=303)
@@ -1226,7 +1269,7 @@ async def get_configuration(request: Request, db: Session = Depends(get_db)):
         "configuration.html",
         {
             "request": request,
-            "config": cfg,
+            "config": _config_for_ui(cfg),
             "provider_presets": PROVIDER_PRESETS,
             "saved": False,
             "error": None,
@@ -1237,10 +1280,11 @@ async def get_configuration(request: Request, db: Session = Depends(get_db)):
 @app.post("/configuration/folders")
 async def configuration_folders(request: Request):
     """List IMAP folders for the credentials currently entered in the configuration form."""
+    _ensure_admin_token(request)
     data = await request.json()
     host = (data.get("imap_host") or "").strip()
     username = (data.get("imap_username") or data.get("email") or "").strip()
-    password = (data.get("mailbox_password") or "").strip()
+    password = (data.get("mailbox_password") or "").strip() or (get_secret("mailbox_password") or "")
 
     try:
         port = int(data.get("imap_port") or 993)
@@ -1256,7 +1300,8 @@ async def configuration_folders(request: Request):
         folders = list_mailboxes(conn)
         return {"ok": True, "folders": folders}
     except Exception as exc:
-        return {"ok": False, "message": str(exc), "folders": []}
+        logger.warning("Folder discovery failed: %s", exc)
+        return {"ok": False, "message": "Could not load IMAP folders with the provided settings.", "folders": []}
     finally:
         if conn:
             close_connection(conn)
@@ -1266,6 +1311,7 @@ async def configuration_folders(request: Request):
 async def save_configuration(request: Request, db: Session = Depends(get_db)):
     """Persist mailbox/OpenAI runtime configuration for installed app usage."""
     form = await request.form()
+    _ensure_admin_token(request, form)
 
     config = {
         "provider": (form.get("provider") or "custom").strip(),
@@ -1281,25 +1327,31 @@ async def save_configuration(request: Request, db: Session = Depends(get_db)):
         "openai_api_key": (form.get("openai_api_key") or "").strip(),
         "openai_model": (form.get("openai_model") or "gpt-4o-mini").strip(),
     }
+    existing_mailbox_password = get_secret("mailbox_password")
+    existing_openai_api_key = get_secret("openai_api_key")
+    config["has_saved_mailbox_password"] = bool(existing_mailbox_password)
+    config["has_saved_openai_api_key"] = bool(existing_openai_api_key)
 
     required_keys = [
         "email",
         "imap_host",
         "imap_port",
         "imap_username",
-        "mailbox_password",
         "source_folder",
         "drafts_folder",
-        "openai_api_key",
         "openai_model",
     ]
     missing = [k for k in required_keys if not config[k]]
+    if not config["mailbox_password"] and not existing_mailbox_password:
+        missing.append("mailbox_password")
+    if not config["openai_api_key"] and not existing_openai_api_key:
+        missing.append("openai_api_key")
     if missing:
         return templates.TemplateResponse(
             "configuration.html",
             {
                 "request": request,
-                "config": config,
+                "config": _config_for_ui(config),
                 "provider_presets": PROVIDER_PRESETS,
                 "saved": False,
                 "error": "Please fill in all configuration fields.",
@@ -1315,7 +1367,7 @@ async def save_configuration(request: Request, db: Session = Depends(get_db)):
             "configuration.html",
             {
                 "request": request,
-                "config": config,
+                "config": _config_for_ui(config),
                 "provider_presets": PROVIDER_PRESETS,
                 "saved": False,
                 "error": "IMAP port must be a positive number.",
@@ -1323,6 +1375,13 @@ async def save_configuration(request: Request, db: Session = Depends(get_db)):
         )
 
     config["imap_port"] = str(imap_port)
+    if not config["mailbox_password"] and existing_mailbox_password:
+        config["mailbox_password"] = existing_mailbox_password
+    if not config["openai_api_key"] and existing_openai_api_key:
+        config["openai_api_key"] = existing_openai_api_key
+
+    set_secret("mailbox_password", config["mailbox_password"])
+    set_secret("openai_api_key", config["openai_api_key"])
 
     # Persist to runtime .env used by desktop app.
     _write_runtime_config(config)
@@ -1338,8 +1397,8 @@ async def save_configuration(request: Request, db: Session = Depends(get_db)):
     os.environ["DRAFTS_FOLDER"] = config["drafts_folder"]
     os.environ["POLLING_ENABLED"] = config["polling_enabled"]
     os.environ["RUN_IN_BACKGROUND"] = config["run_in_background"]
-    os.environ["OPENAI_API_KEY"] = config["openai_api_key"]
     os.environ["OPENAI_MODEL"] = config["openai_model"]
+    _load_runtime_secrets_into_env()
 
     mailbox = db.query(Mailbox).first()
     if not mailbox:
@@ -1376,7 +1435,7 @@ async def save_configuration(request: Request, db: Session = Depends(get_db)):
         "configuration.html",
         {
             "request": request,
-            "config": config,
+            "config": _config_for_ui(config),
             "provider_presets": PROVIDER_PRESETS,
             "saved": True,
             "error": None,
@@ -1410,6 +1469,7 @@ async def save_settings(
 ):
     """Save settings from the form."""
     form = await request.form()
+    _ensure_admin_token(request, form)
     mailbox = db.query(Mailbox).first()
     if not mailbox:
         raise HTTPException(status_code=400, detail="No mailbox configured.")
@@ -1484,7 +1544,10 @@ async def health_view(request: Request, db: Session = Depends(get_db)):
             "mailbox": mailbox,
             "background_mode_enabled": bool(settings and settings.background_mode_enabled),
             "timestamp": datetime.utcnow().isoformat(),
-            "database_url": os.getenv("DATABASE_URL", "sqlite:///./email_drafts.db"),
+            "secret_status": {
+                "mailbox_password": has_secret("mailbox_password"),
+                "openai_api_key": has_secret("openai_api_key"),
+            },
         },
     )
 
@@ -1497,6 +1560,7 @@ async def save_draft_feedback(message_id: int, request: Request, db: Session = D
         raise HTTPException(status_code=404, detail="Message not found")
 
     form = await request.form()
+    _ensure_admin_token(request, form)
     signal = (form.get("signal") or "up").strip().lower()
     reason = (form.get("reason") or "").strip() or None
     feedback_type = (form.get("feedback_type") or "draft").strip().lower()
@@ -1530,6 +1594,7 @@ async def update_message_category(message_id: int, request: Request, db: Session
         raise HTTPException(status_code=404, detail="Message not found")
 
     form = await request.form()
+    _ensure_admin_token(request, form)
     new_category = (form.get("category") or "general").strip().lower()
     if new_category not in CATEGORY_OPTIONS:
         new_category = "general"
@@ -1576,6 +1641,8 @@ async def update_message_category(message_id: int, request: Request, db: Session
 @app.post("/reset-app-data", response_class=HTMLResponse)
 async def reset_app_data(request: Request, db: Session = Depends(get_db)):
     """Clear saved runtime state so the next launch starts from setup again."""
+    form = await request.form()
+    _ensure_admin_token(request, form)
     env_path = _runtime_env_path()
     db_path = _runtime_db_path()
 
@@ -1603,6 +1670,8 @@ async def reset_app_data(request: Request, db: Session = Depends(get_db)):
         "OPENAI_MODEL",
     ]:
         os.environ.pop(key, None)
+    clear_secret("mailbox_password")
+    clear_secret("openai_api_key")
 
     return templates.TemplateResponse(
         "reset_complete.html",

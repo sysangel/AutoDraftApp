@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="draft-admin-token" content="{{ csrf_token() }}" />
   <title>{% block title %}Draft{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="icon" type="image/png" href="/static/brand/Draft-ui-mark.png" />
@@ -31,6 +32,24 @@
   <footer class="footer">
     <p>Draft drafts replies from your inbox in a local desktop app. It never sends email.</p>
   </footer>
+  <script>
+  (function () {
+    const tokenMeta = document.querySelector('meta[name="draft-admin-token"]');
+    if (!tokenMeta) return;
+    const token = tokenMeta.content;
+    document.querySelectorAll('form[method="POST"], form[method="post"]').forEach((form) => {
+      let input = form.querySelector('input[name="csrf_token"]');
+      if (!input) {
+        input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'csrf_token';
+        form.appendChild(input);
+      }
+      input.value = token;
+    });
+    window.DRAFT_ADMIN_TOKEN = token;
+  })();
+  </script>
 </body>
 </html>
 

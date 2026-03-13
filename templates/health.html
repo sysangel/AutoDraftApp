@@ -38,10 +38,11 @@
 
   <div class="health-meta">
     <p><strong>Checked at:</strong> {{ timestamp }}</p>
-    <p><strong>Database:</strong> <span class="mono">{{ database_url }}</span></p>
     <p><strong>Source folder:</strong> <span class="mono">{{ mailbox.source_folder if mailbox else 'INBOX' }}</span></p>
     <p><strong>Automatic polling:</strong> {% if mailbox and mailbox.is_active %}On{% else %}Off{% endif %}</p>
     <p><strong>Background mode preference:</strong> {% if background_mode_enabled %}Enabled{% else %}Off{% endif %}</p>
+    <p><strong>Saved mailbox password:</strong> {% if secret_status.mailbox_password %}Present{% else %}Not saved{% endif %}</p>
+    <p><strong>Saved OpenAI key:</strong> {% if secret_status.openai_api_key %}Present{% else %}Not saved{% endif %}</p>
     <p><strong>Endpoint:</strong> <span class="mono">/health</span> remains available for launcher checks and machine-readable diagnostics.</p>
   </div>
 </section>
