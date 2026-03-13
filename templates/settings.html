@@ -13,8 +13,11 @@
 {% if saved %}
 <div class="alert-success">✓ Settings saved successfully. New drafts will use these settings.</div>
 {% endif %}
+{% if imported_signature %}
+<div class="alert-success">✓ Signature imported. Draft converted it into a plain-text signature for current drafts and saved the original HTML for future rich-signature support.</div>
+{% endif %}
 
-<form method="POST" action="/settings">
+<form method="POST" action="/settings" enctype="multipart/form-data">
   <div class="settings-grid">
 
     <!-- Identity -->
@@ -178,7 +181,26 @@
     <!-- Signature -->
     <div class="settings-section full-width">
       <h2>Email Signature</h2>
-      <p class="section-desc">This will be appended to the end of every generated draft exactly as written.</p>
+      <p class="section-desc">This will be appended to the end of every generated draft exactly as written. You can also import an existing HTML signature and Draft will convert it into a clean plain-text version for current drafts.</p>
+
+      <div class="settings-grid">
+        <div class="form-group">
+          <label for="signature_html_import">Import from pasted HTML</label>
+          <textarea id="signature_html_import" name="signature_html_import"
+                    rows="5"
+                    placeholder="<div>Best,<br>Your Name<br>Your Company</div>"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="signature_html_file">Or upload an .html signature file</label>
+          <input type="file" id="signature_html_file" name="signature_html_file" accept=".html,.htm,text/html" />
+          <p class="form-note">This first version imports HTML into Draft's plain-text signature field so it stays reliable with the current IMAP drafting flow.</p>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn" name="settings_action" value="import_signature">Import Signature</button>
+        <span class="form-note">Import first, then make any final plain-text edits below if you want.</span>
+      </div>
 
       <div class="form-group">
         <label for="signature">Signature</label>
@@ -218,7 +240,7 @@ https://angelsystems.dev">{{ settings.signature or '' }}</textarea>
   {% endif %}
 
   <div class="form-actions">
-    <button type="submit" class="btn btn-primary btn-lg">Save Settings</button>
+    <button type="submit" class="btn btn-primary btn-lg" name="settings_action" value="save">Save Settings</button>
     <span class="form-note">Changes apply to all new drafts going forward.</span>
   </div>
 </form>

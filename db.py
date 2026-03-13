@@ -61,6 +61,7 @@ def _run_lightweight_migrations():
             "lightweight_context_enabled": "ALTER TABLE settings ADD COLUMN lightweight_context_enabled BOOLEAN DEFAULT 1",
             "strict_privacy_mode": "ALTER TABLE settings ADD COLUMN strict_privacy_mode BOOLEAN DEFAULT 0",
             "background_mode_enabled": "ALTER TABLE settings ADD COLUMN background_mode_enabled BOOLEAN DEFAULT 0",
+            "signature_html": "ALTER TABLE settings ADD COLUMN signature_html TEXT",
         },
     }
     migration_map["contact_insights"] = {
@@ -77,6 +78,20 @@ def _run_lightweight_migrations():
                 if column_name in existing_columns:
                     continue
                 conn.execute(text(statement))
+
+        # Add helpful indexes for high-volume local datasets.
+        index_statements = [
+            "CREATE INDEX IF NOT EXISTS ix_messages_mailbox_created_at ON messages (mailbox_id, created_at DESC)",
+            "CREATE INDEX IF NOT EXISTS ix_messages_review_created_at ON messages (needs_review, created_at DESC)",
+            "CREATE INDEX IF NOT EXISTS ix_messages_thread_key ON messages (thread_key)",
+            "CREATE INDEX IF NOT EXISTS ix_conversations_mailbox_updated_at ON conversations (mailbox_id, updated_at DESC)",
+            "CREATE INDEX IF NOT EXISTS ix_contact_insights_mailbox_count ON contact_insights (mailbox_id, message_count DESC)",
+            "CREATE INDEX IF NOT EXISTS ix_domain_insights_mailbox_count ON domain_insights (mailbox_id, message_count DESC)",
+            "CREATE INDEX IF NOT EXISTS ix_drafts_message_created_at ON drafts (message_id_fk, created_at DESC)",
+            "CREATE INDEX IF NOT EXISTS ix_feedback_message_created_at ON draft_feedback (message_id_fk, created_at DESC)",
+        ]
+        for statement in index_statements:
+            conn.execute(text(statement))
 
 
 def get_db():

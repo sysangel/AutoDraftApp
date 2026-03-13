@@ -92,7 +92,13 @@ async def test_openai_key(request: Request):
     if not api_key:
         return {"ok": False, "message": "Please enter your API key first."}
     try:
+        import openai
+        import httpx
         from openai import OpenAI, AuthenticationError
+        logger.info("Testing OpenAI key with openai=%s httpx=%s", getattr(openai, "__version__", "unknown"), getattr(httpx, "__version__", "unknown"))
+        _append_startup_trace(
+            f"openai test using openai={getattr(openai, '__version__', 'unknown')} httpx={getattr(httpx, '__version__', 'unknown')}"
+        )
         client = OpenAI(api_key=api_key)
         client.models.list()
         logger.info("OpenAI API key verified.")
@@ -100,6 +106,14 @@ async def test_openai_key(request: Request):
         return {"ok": True, "message": "API key verified!"}
     except Exception as e:
         msg = str(e)
+        try:
+            import openai
+            import httpx
+            _append_startup_trace(
+                f"openai key test env openai={getattr(openai, '__version__', 'unknown')} httpx={getattr(httpx, '__version__', 'unknown')}"
+            )
+        except Exception:
+            pass
         _append_startup_trace(f"openai key test failed: {msg}")
         if "401" in msg or "invalid_api_key" in msg or "Incorrect API key" in msg:
             return {"ok": False, "message": "Invalid API key — check platform.openai.com/api-keys."}

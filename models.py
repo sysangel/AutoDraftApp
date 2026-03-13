@@ -115,6 +115,7 @@ class Settings(Base):
     lightweight_context_enabled = Column(Boolean, default=True)
     strict_privacy_mode = Column(Boolean, default=False)
     background_mode_enabled = Column(Boolean, default=False)
+    signature_html = Column(Text, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     mailbox = relationship("Mailbox", backref="settings")

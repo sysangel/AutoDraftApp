@@ -21,6 +21,8 @@ import os
 import re
 import threading
 import traceback
+from html import unescape
+from html.parser import HTMLParser
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -79,6 +81,14 @@ _configure_logging()
 logger = logging.getLogger(__name__)
 _append_startup_trace("app.py imported")
 
+MAX_UNREAD_FETCH = 75
+MAX_STORED_BODY_CHARS = 20000
+MAX_STORED_CLEANED_CHARS = 12000
+MESSAGE_PAGE_SIZE = 40
+REVIEW_PAGE_SIZE = 30
+MAX_IMPORTED_SIGNATURE_HTML_CHARS = 50000
+MAX_IMPORTED_SIGNATURE_TEXT_CHARS = 8000
+
 # ---------------------------------------------------------------------------
 # Scheduler
 # ---------------------------------------------------------------------------
@@ -89,6 +99,11 @@ poll_state = {
     "last_finished_at": None,
     "last_result": None,
     "last_error": None,
+    "mailboxes_processed": 0,
+    "messages_processed": 0,
+    "backlog_detected": False,
+    "backlog_mailboxes": [],
+    "last_run_summary": "",
 }
 poll_state_lock = threading.Lock()
 
@@ -304,6 +319,67 @@ def _compact_text(value: str | None, max_chars: int = 260) -> str:
     return text[: max_chars - 1].rstrip() + "…"
 
 
+def _truncate_for_storage(value: str | None, max_chars: int) -> str | None:
+    if value is None:
+        return None
+    if len(value) <= max_chars:
+        return value
+    return value[:max_chars]
+
+
+class _SignatureHTMLToTextParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs):
+        if tag in {"br", "hr"}:
+            self.parts.append("\n")
+        elif tag in {"p", "div", "section", "tr"}:
+            if self.parts and not self.parts[-1].endswith("\n"):
+                self.parts.append("\n")
+        elif tag == "li":
+            if self.parts and not self.parts[-1].endswith("\n"):
+                self.parts.append("\n")
+            self.parts.append("- ")
+
+    def handle_endtag(self, tag: str):
+        if tag in {"p", "div", "section", "li", "tr"}:
+            self.parts.append("\n")
+
+    def handle_data(self, data: str):
+        if data:
+            self.parts.append(data)
+
+
+def _html_signature_to_text(html_value: str) -> str:
+    parser = _SignatureHTMLToTextParser()
+    parser.feed(html_value)
+    raw_text = unescape("".join(parser.parts))
+    raw_text = raw_text.replace("\xa0", " ")
+    raw_text = re.sub(r"\n{3,}", "\n\n", raw_text)
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in raw_text.splitlines()]
+    return "\n".join(line for line in lines if line).strip()
+
+
+def _import_signature_payload(form) -> tuple[str | None, str | None]:
+    html_from_textarea = (form.get("signature_html_import") or "").strip()
+    upload = form.get("signature_html_file")
+    html_from_file = ""
+    if upload and getattr(upload, "filename", ""):
+        file_bytes = upload.file.read()
+        html_from_file = file_bytes.decode("utf-8", errors="ignore").strip()
+
+    html_payload = html_from_textarea or html_from_file
+    if not html_payload:
+        return None, None
+
+    html_payload = _truncate_for_storage(html_payload, MAX_IMPORTED_SIGNATURE_HTML_CHARS) or ""
+    text_payload = _html_signature_to_text(html_payload)
+    text_payload = _truncate_for_storage(text_payload, MAX_IMPORTED_SIGNATURE_TEXT_CHARS) or ""
+    return html_payload or None, text_payload or None
+
+
 def _conversation_summary(previous_summary: str | None, cleaned: str, category: str, topics: list[str]) -> str:
     bits = []
     if previous_summary:
@@ -429,28 +505,65 @@ def _build_generation_context(db: Session, conversation: Conversation | None, me
 
 
 def _message_context_bundle(db: Session, msg: Message) -> dict:
-    draft = db.query(Draft).filter(Draft.message_id_fk == msg.id).first()
-    contact = None
-    domain = None
-    conversation = None
-    if msg.from_email:
-        contact = db.query(ContactInsight).filter(
-            ContactInsight.contact_key == f"{msg.mailbox_id}:{msg.from_email.lower()}"
-        ).first()
-    if msg.participant_domain:
-        domain = db.query(DomainInsight).filter(
-            DomainInsight.domain_key == f"{msg.mailbox_id}:{msg.participant_domain}"
-        ).first()
-    if msg.conversation_id:
-        conversation = db.query(Conversation).filter(Conversation.id == msg.conversation_id).first()
-    return {
-        "message": msg,
-        "draft": draft,
-        "contact": contact,
-        "domain": domain,
-        "conversation": conversation,
-        "client_preferences": _load_client_preferences(contact),
+    return _message_context_bundles(db, [msg])[0]
+
+
+def _message_context_bundles(db: Session, messages: list[Message]) -> list[dict]:
+    if not messages:
+        return []
+
+    message_ids = [msg.id for msg in messages]
+    draft_rows = (
+        db.query(Draft)
+        .filter(Draft.message_id_fk.in_(message_ids))
+        .order_by(Draft.message_id_fk.asc(), Draft.created_at.desc())
+        .all()
+    )
+    drafts_by_message: dict[int, Draft] = {}
+    for draft in draft_rows:
+        drafts_by_message.setdefault(draft.message_id_fk, draft)
+
+    contact_keys = {
+        f"{msg.mailbox_id}:{msg.from_email.lower()}"
+        for msg in messages
+        if msg.from_email
     }
+    domain_keys = {
+        f"{msg.mailbox_id}:{msg.participant_domain}"
+        for msg in messages
+        if msg.participant_domain
+    }
+    conversation_ids = {msg.conversation_id for msg in messages if msg.conversation_id}
+
+    contacts_by_key = {
+        row.contact_key: row
+        for row in db.query(ContactInsight).filter(ContactInsight.contact_key.in_(contact_keys)).all()
+    } if contact_keys else {}
+    domains_by_key = {
+        row.domain_key: row
+        for row in db.query(DomainInsight).filter(DomainInsight.domain_key.in_(domain_keys)).all()
+    } if domain_keys else {}
+    conversations_by_id = {
+        row.id: row
+        for row in db.query(Conversation).filter(Conversation.id.in_(conversation_ids)).all()
+    } if conversation_ids else {}
+
+    bundles = []
+    for msg in messages:
+        contact = contacts_by_key.get(f"{msg.mailbox_id}:{msg.from_email.lower()}") if msg.from_email else None
+        domain = domains_by_key.get(f"{msg.mailbox_id}:{msg.participant_domain}") if msg.participant_domain else None
+        conversation = conversations_by_id.get(msg.conversation_id) if msg.conversation_id else None
+        bundles.append(
+            {
+                "message": msg,
+                "draft": drafts_by_message.get(msg.id),
+                "contact": contact,
+                "domain": domain,
+                "conversation": conversation,
+                "client_preferences": _load_client_preferences(contact),
+            }
+        )
+    return bundles
 
 
 def _recent_activity_summary(enriched: list[dict]) -> dict:
@@ -605,22 +718,36 @@ def _seed_mailbox_from_env():
 # Core poll logic
 # ---------------------------------------------------------------------------
 
-def run_poll_job():
+def run_poll_job() -> dict:
     """
     Background job: poll all active mailboxes, generate drafts, append to Drafts folder.
     Called by the scheduler and also by the manual /poll endpoint.
     """
     db = database.SessionLocal()
+    summary = {
+        "mailboxes_processed": 0,
+        "messages_processed": 0,
+        "backlog_detected": False,
+        "backlog_mailboxes": [],
+    }
     try:
         mailboxes = db.query(Mailbox).filter(Mailbox.is_active == True).all()
         if not mailboxes:
             logger.info("No active mailboxes configured.")
-            return
+            return summary
 
         for mailbox in mailboxes:
-            _process_mailbox(mailbox, db)
+            mailbox_summary = _process_mailbox(mailbox, db)
+            summary["mailboxes_processed"] += 1
+            summary["messages_processed"] += mailbox_summary["messages_processed"]
+            if mailbox_summary["backlog_detected"]:
+                summary["backlog_detected"] = True
+                summary["backlog_mailboxes"].append(
+                    f"{mailbox.email_address} ({mailbox_summary['selected_unread_count']} selected, cap {mailbox_summary['max_unread_fetch']})"
+                )
     finally:
         db.close()
+    return summary
 
 
 def _start_manual_poll() -> bool:
@@ -634,10 +761,17 @@ def _start_manual_poll() -> bool:
 
     def _runner():
         try:
-            run_poll_job()
+            summary = run_poll_job()
             with poll_state_lock:
                 poll_state["last_result"] = "success"
                 poll_state["last_error"] = None
+                poll_state["mailboxes_processed"] = summary["mailboxes_processed"]
+                poll_state["messages_processed"] = summary["messages_processed"]
+                poll_state["backlog_detected"] = summary["backlog_detected"]
+                poll_state["backlog_mailboxes"] = summary["backlog_mailboxes"]
+                poll_state["last_run_summary"] = (
+                    f"Processed {summary['messages_processed']} message(s) across {summary['mailboxes_processed']} mailbox(es)."
+                )
         except Exception as exc:
             logger.error("Manual background poll failed: %s", exc, exc_info=True)
             with poll_state_lock:
@@ -652,8 +786,14 @@ def _start_manual_poll() -> bool:
     return True
 
 
-def _process_mailbox(mailbox: Mailbox, db: Session):
+def _process_mailbox(mailbox: Mailbox, db: Session) -> dict:
     """Process a single mailbox: fetch, draft, append, mark read."""
+    summary = {
+        "messages_processed": 0,
+        "backlog_detected": False,
+        "selected_unread_count": 0,
+        "max_unread_fetch": MAX_UNREAD_FETCH,
+    }
     password = os.getenv(mailbox.password_env_key)
     if not password:
         logger.error(
@@ -661,43 +801,61 @@ def _process_mailbox(mailbox: Mailbox, db: Session):
             mailbox.password_env_key,
             mailbox.email_address,
         )
-        return
+        return summary
 
-    # Build set of already-seen Message-IDs to skip
-    known_ids = {
-        row.message_id
-        for row in db.query(Message.message_id).filter(
-            Message.mailbox_id == mailbox.id
-        ).all()
-    }
-
-    logger.info("Polling mailbox %s (%d known IDs)", mailbox.email_address, len(known_ids))
+    logger.info(
+        "Polling mailbox %s (message history checks are using indexed lookups, unread fetch cap=%d)",
+        mailbox.email_address,
+        MAX_UNREAD_FETCH,
+    )
 
     try:
-        new_messages, conn = poll_mailbox(
+        new_messages, conn, poll_meta = poll_mailbox(
             imap_host=mailbox.imap_host,
             imap_port=mailbox.imap_port,
             username=mailbox.username,
             password=password,
             source_folder=mailbox.source_folder or "INBOX",
             drafts_folder=mailbox.drafts_folder,
-            known_message_ids=known_ids,
+            known_message_ids=None,
+            max_unread_fetch=MAX_UNREAD_FETCH,
         )
+        summary["backlog_detected"] = bool(poll_meta.get("backlog_detected"))
+        summary["selected_unread_count"] = int(poll_meta.get("selected_unread_count", 0))
+        summary["max_unread_fetch"] = int(poll_meta.get("max_unread_fetch", MAX_UNREAD_FETCH))
     except Exception as exc:
         logger.error("IMAP connection failed for %s: %s", mailbox.email_address, exc)
-        return
+        return summary
 
     if not new_messages:
         logger.info("No new messages for %s", mailbox.email_address)
         close_connection(conn)
-        return
+        return summary
 
     logger.info("%d new message(s) to process for %s", len(new_messages), mailbox.email_address)
 
     for parsed in new_messages:
+        if parsed.get("message_id"):
+            exists = (
+                db.query(Message.id)
+                .filter(
+                    Message.mailbox_id == mailbox.id,
+                    Message.message_id == parsed["message_id"],
+                )
+                .first()
+            )
+            if exists:
+                logger.info(
+                    "Skipping already processed message %s for %s",
+                    parsed["message_id"],
+                    mailbox.email_address,
+                )
+                continue
         _process_single_message(parsed, mailbox, conn, db)
+        summary["messages_processed"] += 1
 
     close_connection(conn)
+    return summary
 
 
 def _process_single_message(parsed: dict, mailbox: Mailbox, conn, db: Session):
@@ -723,7 +881,7 @@ def _process_single_message(parsed: dict, mailbox: Mailbox, conn, db: Session):
         from_name=parsed.get("from_name"),
         subject=subject,
         received_at=parsed.get("received_at"),
-        body_text=parsed.get("body_text"),
+        body_text=_truncate_for_storage(parsed.get("body_text"), MAX_STORED_BODY_CHARS),
         category_confidence=0.5,
         needs_review=False,
         status="new",
@@ -735,6 +893,7 @@ def _process_single_message(parsed: dict, mailbox: Mailbox, conn, db: Session):
     try:
         # Step 1: Clean the body text
         cleaned = clean_body(parsed.get("body_text") or "")
+        cleaned = _truncate_for_storage(cleaned, MAX_STORED_CLEANED_CHARS) or ""
         conversation = existing_conversation or db.query(Conversation).filter(Conversation.thread_key == thread_key).first()
         prior_category = conversation.category if conversation else None
         category = _classify_message(subject or "", cleaned, prior_category)
@@ -848,7 +1007,7 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
         .limit(50)
         .all()
     )
-    enriched = [_message_context_bundle(db, msg) for msg in messages]
+    enriched = _message_context_bundles(db, messages)
 
     with poll_state_lock:
         current_poll_state = dict(poll_state)
@@ -881,31 +1040,57 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
 @app.get("/messages", response_class=HTMLResponse)
 async def list_messages(request: Request, db: Session = Depends(get_db)):
     """List all processed messages."""
+    page = max(int(request.query_params.get("page", "1") or "1"), 1)
+    offset = (page - 1) * MESSAGE_PAGE_SIZE
+    total_messages = db.query(Message).count()
     messages = (
         db.query(Message)
         .order_by(Message.created_at.desc())
+        .offset(offset)
+        .limit(MESSAGE_PAGE_SIZE)
         .all()
     )
-    enriched_messages = [_message_context_bundle(db, msg) for msg in messages]
+    enriched_messages = _message_context_bundles(db, messages)
     return templates.TemplateResponse(
         "messages.html",
-        {"request": request, "messages": enriched_messages},
+        {
+            "request": request,
+            "messages": enriched_messages,
+            "page": page,
+            "page_size": MESSAGE_PAGE_SIZE,
+            "total_messages": total_messages,
+            "has_prev": page > 1,
+            "has_next": offset + len(messages) < total_messages,
+        },
     )
 
 
 @app.get("/review", response_class=HTMLResponse)
 async def review_queue(request: Request, db: Session = Depends(get_db)):
     """Manual review queue for low-confidence categorizations."""
+    page = max(int(request.query_params.get("page", "1") or "1"), 1)
+    offset = (page - 1) * REVIEW_PAGE_SIZE
+    total_messages = db.query(Message).filter(Message.needs_review == True).count()
     messages = (
         db.query(Message)
         .filter(Message.needs_review == True)
         .order_by(Message.created_at.desc())
+        .offset(offset)
+        .limit(REVIEW_PAGE_SIZE)
         .all()
     )
-    enriched_messages = [_message_context_bundle(db, msg) for msg in messages]
+    enriched_messages = _message_context_bundles(db, messages)
     return templates.TemplateResponse(
         "review.html",
-        {"request": request, "messages": enriched_messages},
+        {
+            "request": request,
+            "messages": enriched_messages,
+            "page": page,
+            "page_size": REVIEW_PAGE_SIZE,
+            "total_messages": total_messages,
+            "has_prev": page > 1,
+            "has_next": offset + len(messages) < total_messages,
+        },
     )
 
 
@@ -1007,6 +1192,11 @@ async def poll_status():
             "last_finished_at": poll_state["last_finished_at"].isoformat() if poll_state["last_finished_at"] else None,
             "last_result": poll_state["last_result"],
             "last_error": poll_state["last_error"],
+            "mailboxes_processed": poll_state["mailboxes_processed"],
+            "messages_processed": poll_state["messages_processed"],
+            "backlog_detected": poll_state["backlog_detected"],
+            "backlog_mailboxes": poll_state["backlog_mailboxes"],
+            "last_run_summary": poll_state["last_run_summary"],
         }
 
 
@@ -1207,6 +1397,8 @@ async def get_settings(request: Request, db: Session = Depends(get_db)):
             "mailbox": mailbox,
             "settings": settings,
             "category_options": CATEGORY_OPTIONS,
+            "saved": False,
+            "imported_signature": False,
         },
     )
 
@@ -1227,6 +1419,13 @@ async def save_settings(
         settings = Settings(mailbox_id=mailbox.id)
         db.add(settings)
 
+    action = (form.get("settings_action") or "save").strip().lower()
+    imported_signature = False
+    imported_html, imported_text = _import_signature_payload(form)
+    if imported_html and action == "import_signature":
+        settings.signature_html = imported_html
+        imported_signature = True
+
     settings.sender_name = form.get("sender_name", "").strip() or None
     settings.company_name = form.get("company_name", "").strip() or None
     settings.tone = form.get("tone", "professional")
@@ -1244,7 +1443,12 @@ async def save_settings(
     settings.general_prompt = form.get("general_prompt", "").strip() or None
     settings.lightweight_context_enabled = form.get("lightweight_context_enabled") == "on"
     settings.strict_privacy_mode = form.get("strict_privacy_mode") == "on"
-    settings.signature = form.get("signature", "").strip() or None
+    manual_signature = form.get("signature", "").strip() or None
+    settings.signature = imported_text if imported_signature else manual_signature
+    if not imported_signature and manual_signature:
+        settings.signature_html = None
+    elif not imported_signature and not manual_signature:
+        settings.signature_html = None
     settings.footer_link_label = form.get("footer_link_label", "").strip() or None
     settings.footer_link = form.get("footer_link", "").strip() or None
 
@@ -1258,6 +1462,7 @@ async def save_settings(
             "settings": settings,
             "category_options": CATEGORY_OPTIONS,
             "saved": True,
+            "imported_signature": imported_signature,
         },
     )
 

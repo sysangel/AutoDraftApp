@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+DEFAULT_MAX_UNREAD_FETCH = 75
 
 # ---------------------------------------------------------------------------
 # Connection helpers
@@ -75,7 +76,11 @@ def list_mailboxes(conn: imaplib.IMAP4_SSL) -> list[str]:
 # Fetch unread messages
 # ---------------------------------------------------------------------------
 
-def fetch_unread_uids(conn: imaplib.IMAP4_SSL, source_folder: str = "INBOX") -> list[str]:
+def fetch_unread_uids(
+    conn: imaplib.IMAP4_SSL,
+    source_folder: str = "INBOX",
+    max_unread_fetch: int = DEFAULT_MAX_UNREAD_FETCH,
+) -> list[str]:
     """
     Select the configured source folder and return a list of unread (UNSEEN) message UIDs.
     Returns an empty list if none found.
@@ -87,7 +92,14 @@ def fetch_unread_uids(conn: imaplib.IMAP4_SSL, source_folder: str = "INBOX") -> 
     if status != "OK" or not data or not data[0]:
         return []
     uid_list = data[0].decode().split()
-    logger.info("Found %d unread UIDs", len(uid_list))
+    if max_unread_fetch > 0 and len(uid_list) > max_unread_fetch:
+        logger.info(
+            "Unread UID count %d exceeds cap %d; processing newest subset only.",
+            len(uid_list),
+            max_unread_fetch,
+        )
+        uid_list = uid_list[-max_unread_fetch:]
+    logger.info("Found %d unread UIDs selected for processing", len(uid_list))
     return uid_list
 
 
@@ -347,8 +359,9 @@ def poll_mailbox(
     password: str,
     source_folder: str,
     drafts_folder: str,
-    known_message_ids: set,
-) -> list[dict]:
+    known_message_ids: set | None = None,
+    max_unread_fetch: int = DEFAULT_MAX_UNREAD_FETCH,
+) -> tuple[list[dict], imaplib.IMAP4_SSL, dict]:
     """
     Connect, find unread messages not in known_message_ids,
     parse and return them as dicts. Does NOT do AI generation or DB writes.
@@ -361,10 +374,16 @@ def poll_mailbox(
       received_at, body_text, _conn (IMAP connection — keep open for appending)
     """
     conn = get_imap_connection(imap_host, imap_port, username, password)
-    uids = fetch_unread_uids(conn, source_folder=source_folder or "INBOX")
+    uids = fetch_unread_uids(
+        conn,
+        source_folder=source_folder or "INBOX",
+        max_unread_fetch=max_unread_fetch,
+    )
     results = []
+    skipped_known_ids = 0
+    skipped_missing_ids = 0
 
-    for uid in uids:
+    for uid in reversed(uids):
         raw = fetch_raw_message(conn, uid)
         if not raw:
             continue
@@ -373,10 +392,12 @@ def poll_mailbox(
 
         if not msg_id:
             logger.warning("Email with UID %s has no Message-ID, skipping", uid)
+            skipped_missing_ids += 1
             continue
 
-        if msg_id in known_message_ids:
+        if known_message_ids and msg_id in known_message_ids:
             logger.info("Skipping already-processed Message-ID %s", msg_id)
+            skipped_known_ids += 1
             continue
 
         parsed["_conn"] = conn
@@ -386,4 +407,11 @@ def poll_mailbox(
     if not results:
         close_connection(conn)
 
-    return results, conn
+    metadata = {
+        "selected_unread_count": len(uids),
+        "backlog_detected": max_unread_fetch > 0 and len(uids) >= max_unread_fetch,
+        "max_unread_fetch": max_unread_fetch,
+        "skipped_known_ids": skipped_known_ids,
+        "skipped_missing_ids": skipped_missing_ids,
+    }
+    return results, conn, metadata

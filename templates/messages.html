@@ -6,6 +6,9 @@
   <div>
     <h1>All Processed Messages</h1>
     <p class="page-subtitle">Each message opens into a smarter module instead of a dense row. Expand an item to see the draft summary, thread memory, and the lightweight client or domain context Draft has stored locally.</p>
+    {% if total_messages %}
+    <p class="page-subtitle">Showing {{ ((page - 1) * page_size) + 1 }}-{{ ((page - 1) * page_size) + (messages|length) }} of {{ total_messages }} messages.</p>
+    {% endif %}
   </div>
   <a href="/" class="btn">← Back to Dashboard</a>
 </div>
@@ -80,6 +83,16 @@
     </div>
   </details>
   {% endfor %}
+</div>
+<div class="pagination-bar">
+  {% if has_prev %}
+  <a href="/messages?page={{ page - 1 }}" class="btn btn-sm">← Previous</a>
+  {% else %}
+  <span></span>
+  {% endif %}
+  {% if has_next %}
+  <a href="/messages?page={{ page + 1 }}" class="btn btn-sm">Next →</a>
+  {% endif %}
 </div>
 {% else %}
 <div class="empty-state">

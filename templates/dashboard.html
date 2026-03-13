@@ -37,7 +37,23 @@
 {% elif poll_state.last_result == 'error' %}
 <div class="alert-error">The last background poll failed{% if poll_state.last_error %}: {{ poll_state.last_error }}{% endif %}</div>
 {% elif poll_state.last_result == 'success' and poll_state.last_finished_at %}
-<div class="alert-success">Last poll finished successfully.</div>
+<div class="alert-success">
+  {{ poll_state.last_run_summary or 'Last poll finished successfully.' }}
+  {% if poll_state.backlog_detected %}
+    Draft detected a larger unread backlog and processed the newest batch first.
+  {% endif %}
+</div>
+{% endif %}
+
+{% if poll_state.backlog_detected %}
+<div class="alert-info">
+  Backlog mode is active. Draft is intentionally processing unread mail in batches to keep the app responsive.
+  {% if poll_state.backlog_mailboxes %}
+    {% for item in poll_state.backlog_mailboxes %}
+      <div>{{ item }}</div>
+    {% endfor %}
+  {% endif %}
+</div>
 {% endif %}
 
 {% if featured_entry %}

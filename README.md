@@ -189,6 +189,29 @@ These presets can auto-fill common IMAP defaults, but you can still fully custom
 
 ---
 
+## Stress Testing
+
+Draft includes a local synthetic data seeder for UI and database load testing:
+
+- `tools\seed_stress_data.py`
+
+Example:
+
+```bash
+python tools\seed_stress_data.py --reset --messages 2000 --mailboxes 2
+```
+
+This creates a separate SQLite database with synthetic mailboxes, messages, drafts, conversations, and local insights so you can test Draft under heavier volume without touching real email data.
+
+You can point a source-run app at that database with:
+
+```bash
+set DATABASE_URL=sqlite:///C:/EmailDraftApp/stress_test.db
+python -m dotenv run uvicorn app:app --host 127.0.0.1 --port 8000
+```
+
+---
+
 ## Important Environment Variables
 
 | Variable | Description |
@@ -372,4 +395,3 @@ Try:
 - Runtime configuration is stored locally for the desktop app
 - For stronger deployments, replace plain local secret storage with a proper secret manager
 - If exposed beyond a local trusted machine, add authentication and HTTPS
-
