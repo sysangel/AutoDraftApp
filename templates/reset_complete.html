@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Reset Complete - Draft{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Reset Complete</h1>
+    <p class="page-subtitle">Saved runtime data has been removed. The next launch will open the setup flow again.</p>
+  </div>
+</div>
+
+<div class="alert-success">App data reset successfully.</div>
+
+<section class="settings-section">
+  <h2>What Was Cleared</h2>
+  <div class="health-meta">
+    <p><strong>Configuration:</strong> <span class="mono">{{ env_path }}</span></p>
+    <p><strong>Database:</strong> <span class="mono">{{ db_path }}</span></p>
+  </div>
+</section>
+
+<section class="settings-section">
+  <h2>Next Step</h2>
+  <p class="section-desc">Close the application window, then open Draft again from Windows. It will behave like a fresh install and start at setup.</p>
+</section>
+{% endblock %}

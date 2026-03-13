@@ -1,12 +1,12 @@
 ; draft.ai — Inno Setup Installer Script
 ; Requires Inno Setup 6+ from https://jrsoftware.org/isinfo.php
-; Run build_installer.bat first to produce dist\DraftAI\ via PyInstaller.
+; Run build_installer.bat first to produce dist\Draft\ via PyInstaller.
 
-#define AppName      "draft.ai"
+#define AppName      "Draft"
 #define AppVersion   "1.0.0"
-#define AppPublisher "draft.ai"
-#define AppExeName   "DraftAI.exe"
-#define DistDir      "dist\DraftAI"
+#define AppPublisher "Draft"
+#define AppExeName   "Draft.exe"
+#define DistDir      "dist\Draft"
 
 [Setup]
 AppId={{B7C4D2E1-FFAA-4567-9876-ABCDEF123456}
@@ -20,7 +20,7 @@ DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 AllowNoIcons=yes
 OutputDir=installer_output
-OutputBaseFilename=DraftAI_Setup
+OutputBaseFilename=Draft_Setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -29,9 +29,9 @@ PrivilegesRequired=lowest
 DisableProgramGroupPage=yes
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\{#AppExeName}
+SetupIconFile=static\brand\Draft-icon.ico
 ; Require Windows 10+
 MinVersion=10.0
-SetupIconFile=NONE
 ShowLanguageDialog=no
 
 [Languages]
@@ -39,7 +39,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon";  Description: "Create a &desktop shortcut";          GroupDescription: "Shortcuts:"; Flags: unchecked
-Name: "startupentry"; Description: "Launch draft.ai automatically on login"; GroupDescription: "Startup:";   Flags: unchecked
+Name: "startupentry"; Description: "Launch Draft automatically on login"; GroupDescription: "Startup:";   Flags: unchecked
 
 [Files]
 Source: "{#DistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -91,7 +91,7 @@ procedure InitializeWizard();
 begin
   if not IsWebView2Installed() then
     MsgBox(
-      'draft.ai requires Microsoft Edge WebView2, which does not appear to be installed on this PC.' + #13#10 + #13#10 +
+      'Draft requires Microsoft Edge WebView2, which does not appear to be installed on this PC.' + #13#10 + #13#10 +
       'Please download and install it from:' + #13#10 +
       'https://go.microsoft.com/fwlink/p/?LinkId=2124703' + #13#10 + #13#10 +
       'After installing WebView2, run this installer again.',

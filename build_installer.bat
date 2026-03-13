@@ -1,7 +1,7 @@
 @echo off
 setlocal
 echo ============================================
-echo  draft.ai - Build Windows Installer
+echo  Draft - Build Windows Installer
 echo ============================================
 echo.
 
@@ -12,11 +12,11 @@ echo Installing/updating build tools...
 pip install pyinstaller pywebview pywin32 -q
 
 echo.
-echo Building draft.ai with PyInstaller...
+echo Building Draft with PyInstaller...
 
-pyinstaller --onedir ^
-  --name "DraftAI" ^
-  --icon NONE ^
+pyinstaller --onedir --noconfirm --clean ^
+  --name "Draft" ^
+  --icon "static\\brand\\Draft-icon.ico" ^
   --noconsole ^
   --collect-all webview ^
   --add-data "templates;templates" ^
@@ -33,6 +33,7 @@ pyinstaller --onedir ^
   --hidden-import "apscheduler.schedulers.background" ^
   --hidden-import "apscheduler.executors.pool" ^
   --hidden-import "sqlalchemy.dialects.sqlite" ^
+  --hidden-import "app" ^
   --hidden-import "setup_app" ^
   main_app.py
 
@@ -44,7 +45,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo PyInstaller build complete: dist\DraftAI\DraftAI.exe
+echo PyInstaller build complete: dist\Draft\Draft.exe
 echo.
 
 REM --- Compile Inno Setup installer if available ---
@@ -61,17 +62,18 @@ if exist "%ISCC%" (
     echo.
     echo ============================================
     echo  INSTALLER READY:
-    echo  installer_output\DraftAI_Setup.exe
+    echo  installer_output\Draft_Setup.exe
     echo ============================================
   )
 ) else (
   echo.
   echo Inno Setup not found.
   echo Download from: https://jrsoftware.org/isinfo.php
-  echo Then re-run this script to produce DraftAI_Setup.exe
+  echo Then re-run this script to produce Draft_Setup.exe
   echo.
-  echo Portable build is at: dist\DraftAI\DraftAI.exe
+  echo Portable build is at: dist\Draft\Draft.exe
 )
 
 echo.
 pause
+

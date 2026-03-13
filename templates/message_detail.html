@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Message #{{ message.id }} — Email Draft App{% endblock %}
+{% block title %}Message #{{ message.id }} - Draft{% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -18,6 +18,9 @@
       <tr><th>Subject</th><td>{{ message.subject or '(no subject)' }}</td></tr>
       <tr><th>Received</th><td>{% if message.received_at %}{{ message.received_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}{% endif %}</td></tr>
       <tr><th>Message-ID</th><td class="mono small-text">{{ message.message_id }}</td></tr>
+      <tr><th>Category</th><td>{{ message.category or 'general' }}</td></tr>
+      <tr><th>Category Confidence</th><td>{{ '%.0f'|format((message.category_confidence or 0) * 100) }}% {% if message.needs_review %}<span class="status-badge status-error">Needs Review</span>{% endif %}</td></tr>
+      <tr><th>Thread Key</th><td class="mono small-text">{{ message.thread_key or '—' }}</td></tr>
       <tr><th>IMAP UID</th><td class="mono">{{ message.uid or '—' }}</td></tr>
       <tr><th>Draft Appended</th><td>{% if message.draft_appended %}✓ Yes{% else %}No{% endif %}</td></tr>
       <tr><th>Marked Read</th><td>{% if message.is_read_marked %}✓ Yes{% else %}No{% endif %}</td></tr>
@@ -56,6 +59,20 @@
     <p class="note">
       This draft has been saved to your mailbox Drafts folder. Open your email client to review and send it manually.
     </p>
+    <div class="feedback-grid">
+      <form method="POST" action="/messages/{{ message.id }}/feedback" class="feedback-form-inline">
+        <input type="hidden" name="signal" value="up" />
+        <input type="hidden" name="feedback_type" value="draft" />
+        <button type="submit" class="btn btn-sm">Thumbs Up</button>
+      </form>
+      <form method="POST" action="/messages/{{ message.id }}/feedback" class="feedback-form">
+        <input type="hidden" name="signal" value="down" />
+        <input type="hidden" name="feedback_type" value="draft" />
+        <label for="reason">Refine note</label>
+        <textarea id="reason" name="reason" rows="2" placeholder="e.g. Too formal, missed the deadline mention, add meeting link."></textarea>
+        <button type="submit" class="btn btn-primary btn-sm">Save Refinement Note</button>
+      </form>
+    </div>
   </div>
   {% else %}
   <div class="detail-section">
@@ -63,6 +80,72 @@
     <p class="empty-state">No draft was generated for this message.</p>
   </div>
   {% endif %}
+
+  {% if conversation or contact or domain %}
+  <div class="detail-section">
+    <h2>Stored Context</h2>
+    <table class="detail-table">
+      <tr><th>Conversation Summary</th><td>{{ conversation.summary if conversation else '—' }}</td></tr>
+      <tr><th>Recent Contact Summary</th><td>{{ contact.summary if contact else '—' }}</td></tr>
+      <tr><th>Domain Summary</th><td>{{ domain.summary if domain else '—' }}</td></tr>
+      <tr><th>Last Draft Memory</th><td>{{ conversation.last_draft_text if conversation and conversation.last_draft_text else '—' }}</td></tr>
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="detail-section">
+    <h2>Human Review Controls</h2>
+    <p class="section-desc">Use this when Draft is uncertain or you want to teach it a better category for this sender.</p>
+    <form method="POST" action="/messages/{{ message.id }}/category" class="feedback-form">
+      <label for="category">Confirm category</label>
+      <select id="category" name="category">
+        {% for option in category_options %}
+        <option value="{{ option }}" {% if (message.manual_category or message.category) == option %}selected{% endif %}>{{ option|capitalize }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-primary btn-sm">Save Category</button>
+    </form>
+  </div>
+
+  <div class="detail-section">
+    <h2>Client Preferences Metadata</h2>
+    <p class="section-desc">This is the local metadata Draft will prepend to future prompts for this sender.</p>
+    {% if client_preferences %}
+    <pre class="body-pre draft">{{ client_preferences | tojson(indent=2) }}</pre>
+    {% else %}
+    <p class="small-text">No client preference metadata stored yet.</p>
+    {% endif %}
+  </div>
+
+  <div class="detail-section">
+    <h2>Feedback History</h2>
+    {% if feedback_entries %}
+    <div class="smart-list">
+      {% for item in feedback_entries %}
+      <div class="smart-item">
+        <div class="smart-item-summary">
+          <div class="smart-item-head">
+            <div class="smart-item-title-block">
+              <div class="smart-item-title">{{ item.feedback_type|capitalize }} feedback</div>
+              <div class="smart-item-meta">
+                <span>{{ item.signal }}</span>
+                <span>{{ item.created_at.strftime('%Y-%m-%d %H:%M UTC') if item.created_at else '' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% if item.reason %}
+        <div class="smart-item-body">
+          <p class="support-copy">{{ item.reason }}</p>
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="small-text">No explicit feedback saved yet.</p>
+    {% endif %}
+  </div>
 
 </div>
 {% endblock %}

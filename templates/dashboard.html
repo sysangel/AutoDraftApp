@@ -1,84 +1,164 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — draft.ai{% endblock %}
+{% block title %}Dashboard - Draft{% endblock %}
 
 {% block content %}
 {% if request.query_params.get('polled') %}
 <div class="alert-success">Poll completed — inbox checked for new messages.</div>
+{% elif request.query_params.get('poll_started') %}
+<div class="alert-success">Poll started in the background. You can keep using the app while Draft checks your inbox.</div>
+{% elif request.query_params.get('poll_running') %}
+<div class="alert-success">A poll is already running in the background.</div>
+{% elif request.query_params.get('poll_disabled') %}
+<div class="alert-info">Automatic polling is turned off. Re-enable it in Configuration before Draft queries your mailbox again.</div>
 {% elif request.query_params.get('poll_error') %}
 <div class="alert-error">Poll failed — check your mailbox settings and try again.</div>
 {% endif %}
 
 <div class="page-header">
-  <h1>Dashboard</h1>
+  <div>
+    <h1>Dashboard</h1>
+    <p class="page-subtitle">A single drafting canvas for the latest work in motion. Open the activity layer only when you want thread context or a quick pulse on what Draft has seen recently.</p>
+  </div>
   <div class="header-actions">
     <span class="last-updated">Last loaded: {{ now.strftime('%Y-%m-%d %H:%M') }} UTC</span>
-    <form method="POST" action="/poll" style="display:inline;">
-      <button type="submit" class="btn btn-primary">⟳ Poll Now</button>
+    <a href="{% if show_activity %}/{% else %}/?summary=1{% endif %}" class="btn">{% if show_activity %}Hide Activity{% else %}Open Activity{% endif %}</a>
+    <form method="POST" action="/poll" style="display:inline;" id="poll-form">
+      <button type="submit" class="btn btn-primary" id="poll-button" {% if poll_state.running or (mailbox and not mailbox.is_active) %}disabled{% endif %}>
+        {% if mailbox and not mailbox.is_active %}Polling Paused{% elif poll_state.running %}Polling…{% else %}⟳ Poll Now{% endif %}
+      </button>
     </form>
   </div>
 </div>
 
-<div class="stats-bar">
-  <div class="stat-card">
-    <span class="stat-number">{{ enriched | length }}</span>
-    <span class="stat-label">Recent Messages</span>
-  </div>
-  <div class="stat-card">
-    <span class="stat-number">{{ enriched | selectattr('message.status', 'equalto', 'complete') | list | length }}</span>
-    <span class="stat-label">Complete</span>
-  </div>
-  <div class="stat-card">
-    <span class="stat-number">{{ enriched | selectattr('message.status', 'equalto', 'error') | list | length }}</span>
-    <span class="stat-label">Errors</span>
-  </div>
-</div>
+{% if mailbox and not mailbox.is_active %}
+<div class="alert-info">Draft is currently paused for <strong>{{ mailbox.email_address }}</strong>. Source folder stays set to <span class="mono">{{ mailbox.source_folder or 'INBOX' }}</span> until you turn polling back on.</div>
+{% elif poll_state.running %}
+<div class="alert-info" id="poll-banner">Draft is polling in the background. You can keep browsing while it works.</div>
+{% elif poll_state.last_result == 'error' %}
+<div class="alert-error">The last background poll failed{% if poll_state.last_error %}: {{ poll_state.last_error }}{% endif %}</div>
+{% elif poll_state.last_result == 'success' and poll_state.last_finished_at %}
+<div class="alert-success">Last poll finished successfully.</div>
+{% endif %}
 
-{% if enriched %}
-<div class="message-list">
-  {% for item in enriched %}
-  {% set msg = item.message %}
-  {% set draft = item.draft %}
-  <div class="message-card {% if msg.status == 'error' %}card-error{% elif msg.status == 'complete' %}card-complete{% else %}card-pending{% endif %}">
-    <div class="card-header">
-      <div class="card-meta">
-        <span class="from-name">{{ msg.from_name or msg.from_email or 'Unknown sender' }}</span>
-        <span class="from-email">&lt;{{ msg.from_email or '' }}&gt;</span>
+{% if featured_entry %}
+{% set featured_msg = featured_entry.message %}
+{% set featured_draft = featured_entry.draft %}
+<div class="canvas-shell">
+  <section class="canvas-main glass-panel">
+    <div class="canvas-topline">
+      <div>
+        <p class="eyebrow text-ai-blue">Main Canvas</p>
+        <h2>{{ featured_msg.subject or '(no subject)' }}</h2>
+        <p class="canvas-intro">Draft is centered on the latest selected message. Focus a specific thread from the activity layer when you want to review the surrounding context.</p>
       </div>
-      <div class="card-right">
-        <span class="status-badge status-{{ msg.status }}">{{ msg.status }}</span>
-        <span class="received-date">
-          {% if msg.received_at %}{{ msg.received_at.strftime('%b %d, %Y %H:%M') }}{% endif %}
-        </span>
+      <div class="preview-actions">
+        <span class="status-badge status-category">{{ featured_msg.category or 'general' }}</span>
+        <a href="/messages/{{ featured_msg.id }}" class="btn btn-sm">Open Full View</a>
       </div>
     </div>
 
-    <div class="card-subject">
-      <strong>{{ msg.subject or '(no subject)' }}</strong>
+    <div class="canvas-hero">
+      <div class="canvas-draft">
+        <div class="preview-meta">
+          <span>From: {{ featured_msg.from_name or featured_msg.from_email or 'Unknown sender' }}</span>
+          <span>{% if featured_msg.received_at %}{{ featured_msg.received_at.strftime('%Y-%m-%d %H:%M UTC') }}{% endif %}</span>
+        </div>
+        {% if featured_draft %}
+        <div class="preview-subject-line">Subject: {{ featured_msg.subject or '(no subject)' }}</div>
+        <div class="preview-body">{{ featured_draft.draft_text }}</div>
+        {% else %}
+        <div class="preview-empty">No draft has been generated yet for this message.</div>
+        {% endif %}
+      </div>
+
+      <div class="canvas-side-stack">
+        <article class="smart-panel">
+          <p class="eyebrow text-ai-purple">Sender Insight</p>
+          <h3>{{ featured_entry.contact.contact_name if featured_entry.contact and featured_entry.contact.contact_name else featured_msg.from_name or featured_msg.from_email or 'Unknown sender' }}</h3>
+          <p class="support-copy">{{ featured_entry.contact.summary if featured_entry.contact and featured_entry.contact.summary else 'No local sender summary yet. Draft will keep this lightweight until more messages arrive.' }}</p>
+        </article>
+        <article class="smart-panel">
+          <p class="eyebrow text-ai-orange">Mailbox State</p>
+          <h3>{% if mailbox and mailbox.is_active %}Polling enabled{% else %}Polling paused{% endif %}</h3>
+          <p class="support-copy">Source folder: <span class="mono">{{ mailbox.source_folder if mailbox else 'INBOX' }}</span></p>
+          <p class="support-copy">Drafts folder: <span class="mono">{{ mailbox.drafts_folder if mailbox else 'Drafts' }}</span></p>
+        </article>
+      </div>
     </div>
 
-    {% if draft %}
-    <div class="card-draft">
-      <div class="draft-label">Generated Draft:</div>
-      <div class="draft-text">{{ draft.draft_text }}</div>
-      {% if draft.model_name %}
-      <div class="draft-meta">Model: {{ draft.model_name }} | Prompt: {{ draft.prompt_version }}</div>
-      {% endif %}
-    </div>
+    {% if featured_msg.error_message %}
+    <div class="error-box">⚠ {{ featured_msg.error_message }}</div>
     {% endif %}
 
-    {% if msg.error_message %}
-    <div class="error-box">⚠ {{ msg.error_message }}</div>
-    {% endif %}
+    <section class="smart-stream">
+      <div class="smart-stream-header">
+        <div>
+          <p class="eyebrow text-ai-purple">Recent Activity</p>
+          <h3>Quick picks</h3>
+        </div>
+        <a href="/messages" class="btn btn-sm">See all processed messages</a>
+      </div>
+      <div class="message-chip-row">
+        {% for item in enriched[:6] %}
+        {% set msg = item.message %}
+        <a href="/?focus={{ msg.id }}" class="message-chip {% if featured_msg.id == msg.id %}is-active{% endif %}">
+          <span class="message-chip-title">{{ msg.from_name or msg.from_email or 'Unknown sender' }}</span>
+          <span class="message-chip-meta">{{ msg.category or 'general' }} · {{ msg.status }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+  </section>
 
-    <div class="card-footer">
-      <a href="/messages/{{ msg.id }}" class="btn btn-sm">View Details</a>
-      <span class="card-flags">
-        {% if msg.draft_appended %}✓ Draft saved{% endif %}
-        {% if msg.is_read_marked %} · ✓ Marked read{% endif %}
-      </span>
+  {% if show_activity %}
+  <aside class="activity-drawer glass-panel">
+    <div class="activity-drawer-header">
+      <div>
+        <p class="eyebrow text-ai-purple">{% if focus_entry %}Focused Thread{% else %}High-Level Summary{% endif %}</p>
+        <h3>{% if focus_entry %}Recent Activity{% else %}Mailbox Snapshot{% endif %}</h3>
+      </div>
+      <a href="/" class="btn btn-sm">Close</a>
     </div>
-  </div>
-  {% endfor %}
+
+    <div class="summary-stack">
+      <article class="summary-module">
+        <div class="summary-kicker text-ai-blue">Message volume</div>
+        <div class="summary-value">{{ activity_summary.message_count }}</div>
+        <p class="support-copy">Top category: {{ activity_summary.top_category }}. Most common status: {{ activity_summary.top_status }}.</p>
+      </article>
+      <article class="summary-module">
+        <div class="summary-kicker text-ai-orange">Category mix</div>
+        {% for category, count in activity_summary.categories %}
+        <div class="summary-line"><span>{{ category }}</span><strong>{{ count }}</strong></div>
+        {% endfor %}
+      </article>
+    </div>
+
+    <div class="rail-list">
+      {% for item in enriched %}
+      {% set msg = item.message %}
+      <a href="/?focus={{ msg.id }}" class="rail-item {% if focus_entry and focus_entry.message.id == msg.id %}is-featured{% endif %}">
+        <div class="rail-item-top">
+          <span class="from-name">{{ msg.from_name or msg.from_email or 'Unknown sender' }}</span>
+          <span class="status-badge status-{{ msg.status }}">{{ msg.status }}</span>
+        </div>
+        <div class="rail-subject">{{ msg.subject or '(no subject)' }}</div>
+        <div class="rail-meta">
+          <span class="status-badge status-category">{{ msg.category or 'general' }}</span>
+          <span>{% if msg.received_at %}{{ msg.received_at.strftime('%b %d, %H:%M') }}{% endif %}</span>
+        </div>
+        {% if item.conversation and item.conversation.summary %}
+        <p class="rail-snippet">{{ item.conversation.summary }}</p>
+        {% elif item.contact and item.contact.summary %}
+        <p class="rail-snippet">{{ item.contact.summary }}</p>
+        {% elif item.draft %}
+        <p class="rail-snippet">{{ item.draft.draft_text[:150] }}{% if item.draft.draft_text|length > 150 %}...{% endif %}</p>
+        {% endif %}
+      </a>
+      {% endfor %}
+    </div>
+  </aside>
+  {% endif %}
 </div>
 {% else %}
 <div class="empty-state">
@@ -86,4 +166,30 @@
   or wait for the background poller to run (every 2 minutes).</p>
 </div>
 {% endif %}
+
+<script>
+const pollButton = document.getElementById('poll-button');
+const pollBanner = document.getElementById('poll-banner');
+
+async function refreshPollStatus() {
+  try {
+    const response = await fetch('/poll-status', { cache: 'no-store' });
+    const state = await response.json();
+    if (!pollButton) return;
+    if (state.running) {
+      pollButton.disabled = true;
+      pollButton.textContent = 'Polling…';
+      if (pollBanner) pollBanner.style.display = 'block';
+    } else {
+      pollButton.disabled = false;
+      pollButton.textContent = '⟳ Poll Now';
+      if (pollBanner) pollBanner.style.display = 'none';
+    }
+  } catch (err) {
+    // Quietly ignore transient status polling errors.
+  }
+}
+
+setInterval(refreshPollStatus, 2500);
+</script>
 {% endblock %}

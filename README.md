@@ -1,37 +1,133 @@
-# Email Draft App
+# Draft
 
-A simple internal MVP that reads incoming emails via IMAP, generates professional reply drafts using OpenAI, and saves those drafts back into your mailbox Drafts folder — so you can review and send them manually from your own email client.
+Draft is a Windows desktop app that monitors an IMAP mailbox, generates reply drafts with OpenAI, and saves those drafts back into your mailbox Drafts folder for manual review.
 
-**This app never sends email.** There is no SMTP, no auto-send, and no sending of any kind.
+It is designed to reduce inbox admin work without taking away control.
 
----
-
-## What it does
-
-1. Polls your INBOX via IMAP every 2 minutes
-2. Finds unread messages it hasn't seen before
-3. Cleans the email body (removes quoted history, signatures)
-4. Sends the cleaned body to OpenAI to generate a draft reply
-5. Appends the draft to your mailbox Drafts folder via IMAP
-6. Marks the original email as read
-7. Stores everything in a local SQLite database
-8. Shows a simple admin UI at `http://localhost:8000`
+**Draft never sends email.** There is no SMTP auto-send path in the app.
 
 ---
 
-## Setup
+## What Draft Does
 
-### 1. Clone and create a virtual environment
+Draft can:
+
+1. Poll a selected IMAP folder on a schedule or on demand
+2. Detect unread emails that have not already been processed
+3. Clean message bodies before drafting
+4. Categorize emails with AI
+5. Generate context-aware reply drafts
+6. Append those drafts to your IMAP Drafts folder
+7. Mark the original message as read
+8. Store lightweight local context in SQLite to improve future drafts
+9. Let you review messages, feedback, insights, and configuration in a desktop UI
+
+---
+
+## Desktop App
+
+Draft now runs as a packaged Windows desktop application rather than requiring you to manually use a browser.
+
+Desktop behavior:
+
+- Native Windows installer
+- First-run setup flow
+- Main app opens in its own window
+- Single-app behavior for normal launches
+- Optional launch on login via installer task
+- Local FastAPI server still powers the UI under the hood
+
+While the app is running, polling is active. If the app is fully closed, polling stops.
+
+---
+
+## Core Guardrails
+
+- Draft only creates drafts
+- Draft never sends mail
+- Sensitive context is kept tightly bounded
+- Local summaries stay on your machine
+- Strict privacy mode can further reduce what is included in AI prompts
+
+Important note:
+
+- OpenAI API usage is still subject to your account or organization data controls
+- The app minimizes sent content, but app code alone cannot guarantee a universal zero-retention policy
+
+---
+
+## Main Features
+
+### Inbox Processing
+
+- Scheduled polling
+- Background-safe manual polling
+- Duplicate prevention using `Message-ID`
+- Configurable source folder beyond just `INBOX`
+
+### Draft Generation
+
+- Reply length controls
+- Tone controls
+- Hard rule guidance
+- Business context guidance
+- Category-specific prompting
+- Thread-aware context using bounded local summaries
+
+### Categorization
+
+- AI-based categorization instead of simple keyword rules
+- Review Queue for lower-confidence categorizations
+- Manual category correction flow
+
+### Feedback Loop
+
+- Thumbs up feedback
+- Refine-note feedback
+- Client preference metadata saved locally
+- Future drafts can incorporate learned client-specific guidance
+
+### Insights
+
+- Top contacts
+- Top domains
+- Lightweight sender and thread summaries
+- Transparency into what context has been stored locally
+
+### Recovery / Troubleshooting
+
+- Health page
+- Reset App Data button in-app
+- First-run recovery flow
+- Startup logging and installer flow improvements
+
+---
+
+## Setup Options
+
+## Option 1: Install the Windows App
+
+Use the generated installer:
+
+- `installer_output\Draft_Setup.exe`
+
+After installing:
+
+1. Launch `Draft`
+2. Complete setup if no saved app data exists
+3. Configure mailbox and OpenAI settings
+4. Poll your mailbox from the desktop app
+
+## Option 2: Run From Source
+
+### 1. Create a virtual environment
 
 ```bash
-git clone <repo>
-cd email-draft-app
-python3 -m venv venv
-source venv/bin/activate       # Linux / macOS
-venv\Scripts\activate          # Windows
+python -m venv venv
+venv\Scripts\activate
 ```
 
-### 2. Install requirements
+### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
@@ -39,158 +135,241 @@ pip install -r requirements.txt
 
 ### 3. Configure environment variables
 
-```bash
-cp .env.example .env
-```
+Copy `.env.example` to `.env` and provide values for your mailbox and OpenAI credentials.
 
-Edit `.env` with your values:
-
-| Variable | Description |
-|---|---|
-| `MAILBOX_EMAIL` | Your full email address |
-| `IMAP_HOST` | Your IMAP server hostname (e.g. `mail.yourdomain.com`) |
-| `IMAP_PORT` | IMAP SSL port — almost always `993` |
-| `IMAP_USERNAME` | Usually the same as your email address |
-| `MAILBOX_PASSWORD` | Your email password |
-| `DRAFTS_FOLDER` | Mailbox folder name for drafts (see below) |
-| `OPENAI_API_KEY` | Your OpenAI API key |
-| `OPENAI_MODEL` | OpenAI model to use (default: `gpt-4o-mini`) |
-
-### 4. Bluehost IMAP settings
-
-For Bluehost-hosted accounts:
-
-- **IMAP Host:** `mail.yourdomain.com`
-- **IMAP Port:** `993` (SSL)
-- **Username:** your full email address
-- **Password:** your email password
-
-You can confirm these in Bluehost cPanel → Email Accounts → Connect Devices.
-
-### 5. Run the app
+### 4. Run the app
 
 ```bash
 python -m dotenv run uvicorn app:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Or if you load .env manually:
-
-```bash
-export $(grep -v '^#' .env | xargs)
-uvicorn app:app --reload --host 0.0.0.0 --port 8000
-```
-
-Open `http://localhost:8000` in your browser.
+The web app will be available at `http://localhost:8000`.
 
 ---
 
-## Drafts folder name
+## Configuration
 
-Different mail servers use different folder names for Drafts. Common ones:
+Draft supports:
+
+- IMAP host
+- IMAP port
+- IMAP username
+- mailbox password
+- source folder
+- drafts folder
+- OpenAI API key
+- OpenAI model
+- polling enabled toggle
+- background mode preference
+
+The installed desktop app stores runtime state in:
+
+- `%APPDATA%\draft.ai\`
+
+That folder is used for:
+
+- `.env`
+- SQLite database
+- runtime logs
+
+---
+
+## Provider Presets
+
+Draft includes preset helpers for:
+
+- Bluehost
+- Gmail
+- Outlook / Microsoft 365
+- Yahoo
+- Zoho
+- Custom
+
+These presets can auto-fill common IMAP defaults, but you can still fully customize the configuration.
+
+---
+
+## Important Environment Variables
+
+| Variable | Description |
+|---|---|
+| `MAILBOX_EMAIL` | Mailbox email address |
+| `IMAP_HOST` | IMAP server hostname |
+| `IMAP_PORT` | IMAP SSL port, usually `993` |
+| `IMAP_USERNAME` | IMAP username |
+| `MAILBOX_PASSWORD` | Mailbox password |
+| `DRAFTS_FOLDER` | IMAP drafts folder name |
+| `SOURCE_FOLDER` | IMAP folder Draft should poll |
+| `OPENAI_API_KEY` | OpenAI API key |
+| `OPENAI_MODEL` | OpenAI model name |
+
+---
+
+## Drafts Folder Notes
+
+Common Drafts folder names:
 
 | Server type | Folder name |
 |---|---|
 | Bluehost / cPanel default | `Drafts` |
 | Some Dovecot configs | `INBOX.Drafts` |
 | Some older servers | `Draft` |
+| Gmail | `[Gmail]/Drafts` |
 
-**How to find yours:** Open your email client (e.g. Thunderbird, Apple Mail) or webmail (Bluehost Webmail / Roundcube), and check the exact folder name shown for your Drafts folder.
-
-Set it in `.env`:
-
-```
-DRAFTS_FOLDER=Drafts
-```
-
-If drafts aren't appearing, try `INBOX.Drafts` as the next option.
+If drafts are not appearing, verify the exact folder name used by your email provider.
 
 ---
 
-## Duplicate prevention
+## Duplicate Prevention
 
-Every processed email is stored in the SQLite database using its RFC 2822 `Message-ID` header as the unique key. Before processing any email, the app checks whether that `Message-ID` already exists in the database.
+Draft stores processed messages locally using the RFC 2822 `Message-ID` as a unique key.
 
-- This means even if an email is accidentally marked unread again, it will **never be processed twice**.
-- The app does not rely solely on the read/unread flag.
-- If you want to reprocess an email, you would need to delete its record from the `messages` table.
+That means:
+
+- messages are not processed twice just because they become unread again
+- reprocessing requires clearing the stored record
 
 ---
 
-## Admin UI
+## Data Stored Locally
 
-| URL | Description |
+Draft uses a local SQLite database to store useful but bounded metadata, including:
+
+- processed message records
+- generated drafts
+- categorization status
+- thread summaries
+- sender insights
+- domain insights
+- client preference metadata
+- feedback and refinement notes
+
+Draft is intentionally not a full CRM sync engine. It stores a constrained local knowledge layer to improve drafting quality without becoming overly invasive.
+
+---
+
+## Privacy Model
+
+Draft is built to keep data collection tightly controlled:
+
+- no attachments are broadly ingested
+- prompts are bounded
+- local summaries are compact
+- strict privacy mode can minimize AI prompt context further
+- insights are intentionally lightweight, not deep profile records
+
+You can also reset local app state from inside the app.
+
+---
+
+## Main UI Areas
+
+| Route | Purpose |
 |---|---|
-| `http://localhost:8000/` | Dashboard — recent messages with drafts |
-| `http://localhost:8000/messages` | Full message list |
-| `http://localhost:8000/messages/{id}` | Detail view for a single message |
-| `http://localhost:8000/poll` (POST) | Manually trigger a poll |
-| `http://localhost:8000/health` | Health check |
-
-Use the **Poll Now** button on the dashboard to trigger an immediate check instead of waiting for the 2-minute interval.
-
----
-
-## Why no SMTP / sending?
-
-This is intentional. The app is designed for the case where:
-
-- You want AI-assisted draft generation but need to review before sending
-- You don't want to risk accidental sends
-- You want to manage sending entirely from your own email client
-
-The app uses IMAP APPEND to place drafts in your mailbox. Your normal email client (Roundcube, Thunderbird, Outlook, Apple Mail, etc.) will display those drafts in your Drafts folder, ready for you to edit and send manually.
+| `/` | Dashboard |
+| `/messages` | All processed messages |
+| `/messages/{id}` | Message detail |
+| `/review` | Low-confidence categorization review queue |
+| `/insights` | Local contact/domain insights |
+| `/settings` | Prompt and privacy settings |
+| `/configuration` | Mailbox and runtime configuration |
+| `/health/view` | Human-friendly health page |
+| `/health` | Machine-readable health endpoint |
 
 ---
 
-## Project structure
+## Build and Packaging
 
+Windows packaging uses:
+
+- PyInstaller
+- Inno Setup
+
+Build script:
+
+```bat
+build_installer.bat
 ```
-email-draft-app/
-├── app.py              # FastAPI routes, scheduler, poll logic
-├── db.py               # SQLite engine and session factory
-├── models.py           # SQLAlchemy ORM models
-├── imap_service.py     # All IMAP operations (read, append, mark read)
-├── ai_service.py       # OpenAI draft generation
+
+Output:
+
+- `dist\Draft\Draft.exe`
+- `installer_output\Draft_Setup.exe`
+
+For distribution, share the installer, not just the raw EXE.
+
+---
+
+## Project Structure
+
+```text
+EmailDraftApp/
+├── app.py
+├── main_app.py
+├── setup_app.py
+├── ai_service.py
+├── imap_service.py
+├── db.py
+├── models.py
+├── provider_presets.py
+├── build_installer.bat
+├── draft_ai_installer.iss
 ├── templates/
-│   ├── base.html
-│   ├── dashboard.html
-│   ├── messages.html
-│   └── message_detail.html
 ├── static/
-│   └── style.css
-├── .env.example        # Copy to .env and fill in
-├── requirements.txt
+│   ├── style.css
+│   └── brand/
+├── tools/
 └── README.md
 ```
 
 ---
 
-## Security notes
+## Troubleshooting
 
-- Passwords are stored only in environment variables, never in the database
-- The database stores a reference key name (e.g. `MAILBOX_PASSWORD`) not the actual password
-- **For production:** Replace `.env` password storage with a proper secrets manager (AWS Secrets Manager, HashiCorp Vault, etc.)
-- **For production:** Add authentication to the admin UI (currently open to anyone on the network)
-- **For production:** Use HTTPS
+### The setup opens but the main app does not
+
+- Use the in-app reset flow if stale app data is present
+- Check `%APPDATA%\draft.ai\`
+- Relaunch after clearing runtime state if needed
+
+### The app skips setup on a fresh reinstall
+
+Uninstalling the app does not always remove `%APPDATA%\draft.ai\`.
+
+If `.env` still exists there, Draft treats the install as an existing configured user.
+
+### Polling only works while the app is open
+
+This is expected in the current desktop model. The app must be running for polling to continue.
+
+### The taskbar icon does not update
+
+Windows caches icons aggressively.
+
+Try:
+
+1. Uninstall or reinstall the latest build
+2. Launch the updated app
+3. Re-pin it if necessary
+
+### Drafts are not appearing
+
+- Verify `DRAFTS_FOLDER`
+- Confirm the selected IMAP Drafts folder name
+- Test alternate names such as `Drafts`, `INBOX.Drafts`, or `[Gmail]/Drafts`
+
+### IMAP login fails
+
+- Verify host, port, username, and password
+- Confirm IMAP access is enabled with your provider
+- Some providers require app passwords
 
 ---
 
-## Troubleshooting
+## Security Notes
 
-**Drafts not appearing in my email client**
-- Check `DRAFTS_FOLDER` in `.env` — try `Drafts`, `INBOX.Drafts`, or `Draft`
-- Some clients cache folder lists; try refreshing or restarting your email client
-- Check app logs for `append_draft_to_folder` errors
+- Mailbox passwords are not stored in the SQLite database
+- Runtime configuration is stored locally for the desktop app
+- For stronger deployments, replace plain local secret storage with a proper secret manager
+- If exposed beyond a local trusted machine, add authentication and HTTPS
 
-**IMAP login failing**
-- Confirm host, port, username, and password in `.env`
-- Bluehost may require you to enable IMAP in cPanel → Email Accounts
-- Check if your host requires app-specific passwords
-
-**"No active mailboxes configured"**
-- Make sure `MAILBOX_EMAIL` and `IMAP_HOST` are set in `.env` before starting the app
-- The mailbox is seeded from env vars on first startup
-
-**OpenAI errors**
-- Check `OPENAI_API_KEY` is valid and has credits
-- Try switching `OPENAI_MODEL` to `gpt-3.5-turbo` for lower cost testing

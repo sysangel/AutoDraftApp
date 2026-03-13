@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Health - Draft{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Health</h1>
+    <p class="page-subtitle">A quick runtime snapshot for the desktop app, database, and configured mailboxes.</p>
+  </div>
+  <div class="header-actions">
+    <a href="/health" class="btn" target="_blank" rel="noopener">Open JSON</a>
+    <form method="POST" action="/reset-app-data" onsubmit="return confirm('Reset saved configuration and local database? You will need to relaunch the app and run setup again.');">
+      <button type="submit" class="btn btn-danger">Reset App Data</button>
+    </form>
+  </div>
+</div>
+
+<div class="health-grid">
+  <section class="health-card">
+    <span class="health-label">Status</span>
+    <div class="health-value is-healthy">{{ status }}</div>
+  </section>
+
+  <section class="health-card">
+    <span class="health-label">Messages</span>
+    <div class="health-value">{{ message_count }}</div>
+  </section>
+
+  <section class="health-card">
+    <span class="health-label">Active Mailboxes</span>
+    <div class="health-value">{{ mailbox_count }}</div>
+  </section>
+</div>
+
+<section class="settings-section">
+  <h2>Runtime Details</h2>
+  <p class="section-desc">These values are useful for troubleshooting without dropping into raw JSON.</p>
+
+  <div class="health-meta">
+    <p><strong>Checked at:</strong> {{ timestamp }}</p>
+    <p><strong>Database:</strong> <span class="mono">{{ database_url }}</span></p>
+    <p><strong>Source folder:</strong> <span class="mono">{{ mailbox.source_folder if mailbox else 'INBOX' }}</span></p>
+    <p><strong>Automatic polling:</strong> {% if mailbox and mailbox.is_active %}On{% else %}Off{% endif %}</p>
+    <p><strong>Background mode preference:</strong> {% if background_mode_enabled %}Enabled{% else %}Off{% endif %}</p>
+    <p><strong>Endpoint:</strong> <span class="mono">/health</span> remains available for launcher checks and machine-readable diagnostics.</p>
+  </div>
+</section>
+
+<section class="settings-section">
+  <h2>Privacy Notes</h2>
+  <p class="section-desc">Draft keeps local context intentionally compact. If you need the most conservative prompt behavior, enable <strong class="text-ai-purple">Strict privacy mode</strong> in Settings to send only the current cleaned message and your saved instructions.</p>
+  <div class="health-meta">
+    <p><strong>Local storage:</strong> Configuration, database rows, compact conversation summaries, and optional lightweight insights stay on this machine.</p>
+    <p><strong>External prompt data:</strong> Only the bounded prompt content needed to draft the reply is sent to OpenAI.</p>
+    <p><strong>Compliance note:</strong> If you need formal retention guarantees from OpenAI, use organization-level data controls appropriate for your account.</p>
+  </div>
+</section>
+{% endblock %}

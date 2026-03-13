@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Configuration - Draft{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Configuration</h1>
+    <p class="page-subtitle">Manage the mailbox and OpenAI settings the desktop app uses while it is running. Provider presets only fill common defaults; you stay in control of the final values.</p>
+  </div>
+  <a href="/" class="btn">← Dashboard</a>
+</div>
+
+{% if saved %}
+<div class="alert-success">✓ Configuration saved. Polling and future drafts will use these values.</div>
+{% endif %}
+{% if error %}
+<div class="alert-error">{{ error }}</div>
+{% endif %}
+
+<form method="POST" action="/configuration">
+  <div class="config-layout settings-grid">
+
+    <div class="settings-section">
+      <h2>Mailbox</h2>
+      <p class="section-desc">IMAP settings used to read inbound email and append drafts.</p>
+
+      <div class="form-group">
+        <label for="provider">Provider Preset</label>
+        <select id="provider" name="provider" onchange="applyProviderPreset()">
+          {% for key, preset in provider_presets.items() %}
+          <option value="{{ key }}" {% if (config.provider or 'custom') == key %}selected{% endif %}>{{ preset.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="email">Email Address</label>
+        <input type="email" id="email" name="email" value="{{ config.email or '' }}" required />
+      </div>
+
+      <div class="form-group">
+        <label for="imap_username">IMAP Username</label>
+        <input type="text" id="imap_username" name="imap_username" value="{{ config.imap_username or '' }}" required />
+      </div>
+
+      <div class="form-group">
+        <label for="mailbox_password">Mailbox Password / App Password</label>
+        <input type="password" id="mailbox_password" name="mailbox_password" value="{{ config.mailbox_password or '' }}" required />
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h2>IMAP Server</h2>
+      <p class="section-desc">Server and folder values for mailbox access. You can keep setup simple, then come back here later to target a custom folder outside the default inbox.</p>
+
+      <div class="form-group">
+        <label for="imap_host">IMAP Host</label>
+        <input type="text" id="imap_host" name="imap_host" value="{{ config.imap_host or '' }}" required />
+      </div>
+
+      <div class="form-group">
+        <label for="imap_port">IMAP Port</label>
+        <input type="number" id="imap_port" name="imap_port" value="{{ config.imap_port or '993' }}" required />
+      </div>
+
+      <div class="form-group">
+        <label for="source_folder">Source Folder</label>
+        <input type="text" id="source_folder" name="source_folder" list="imap-folders" value="{{ config.source_folder or 'INBOX' }}" required />
+        <datalist id="imap-folders">
+          <option value="INBOX"></option>
+          <option value="Sent"></option>
+          <option value="Archive"></option>
+        </datalist>
+      </div>
+
+      <div class="form-group">
+        <label for="drafts_folder">Drafts Folder</label>
+        <input type="text" id="drafts_folder" name="drafts_folder" value="{{ config.drafts_folder or 'Drafts' }}" required />
+      </div>
+
+      <div class="form-actions" style="margin-bottom: 0;">
+        <button type="button" class="btn" onclick="loadFolders()">Find Folders</button>
+        <span class="form-note" id="folder-status">Use this after entering valid IMAP credentials to browse available folders.</span>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h2>Desktop Behavior</h2>
+      <p class="section-desc">Pause automatic polling when needed, and decide whether the app should keep working after the window is closed in a future background-mode update.</p>
+
+      <div class="form-group checkbox-group">
+        <label class="checkbox-label">
+          <input type="checkbox" name="polling_enabled" {% if config.polling_enabled != '0' %}checked{% endif %} />
+          Poll for email automatically
+        </label>
+        <p class="form-note">Turn this off if you want Draft to stop querying new mail until you re-enable it.</p>
+      </div>
+
+      <div class="form-group checkbox-group">
+        <label class="checkbox-label">
+          <input type="checkbox" name="run_in_background" {% if config.run_in_background == '1' %}checked{% endif %} />
+          Keep background mode enabled
+        </label>
+        <p class="form-note">This preference is saved now so the desktop wrapper can support minimize-to-tray behavior cleanly in the next pass.</p>
+      </div>
+    </div>
+
+    <div class="settings-section full-width">
+      <h2>OpenAI</h2>
+      <p class="section-desc">Credentials and model used for drafting reply text.</p>
+
+      <div class="form-group">
+        <label for="openai_api_key">OpenAI API Key</label>
+        <input type="password" id="openai_api_key" name="openai_api_key" value="{{ config.openai_api_key or '' }}" required />
+      </div>
+
+      <div class="form-group">
+        <label for="openai_model">Model</label>
+        <input type="text" id="openai_model" name="openai_model" value="{{ config.openai_model or 'gpt-4o-mini' }}" required />
+      </div>
+    </div>
+
+  </div>
+
+  <div class="form-actions config-actions">
+    <button type="submit" class="btn btn-primary btn-lg">Save Configuration</button>
+    <span class="form-note">Values are stored in your local app data .env file. The app keeps prompt context intentionally compact and local-only.</span>
+  </div>
+</form>
+
+<script>
+const providerPresets = {{ provider_presets | tojson }};
+function applyProviderPreset() {
+  const provider = document.getElementById('provider').value;
+  const preset = providerPresets[provider];
+  if (!preset || provider === 'custom') return;
+  document.getElementById('imap_host').value = preset.imap_host || '';
+  document.getElementById('imap_port').value = preset.imap_port || '993';
+  document.getElementById('drafts_folder').value = preset.drafts_folder || 'Drafts';
+}
+
+async function loadFolders() {
+  const status = document.getElementById('folder-status');
+  const list = document.getElementById('imap-folders');
+  status.textContent = 'Checking your IMAP folders...';
+
+  try {
+    const response = await fetch('/configuration/folders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: document.getElementById('email').value,
+        imap_host: document.getElementById('imap_host').value,
+        imap_port: document.getElementById('imap_port').value,
+        imap_username: document.getElementById('imap_username').value,
+        mailbox_password: document.getElementById('mailbox_password').value
+      })
+    });
+    const data = await response.json();
+    if (!data.ok) {
+      status.textContent = data.message || 'Could not load folders.';
+      return;
+    }
+
+    list.innerHTML = '';
+    (data.folders || []).forEach((folder) => {
+      const option = document.createElement('option');
+      option.value = folder;
+      list.appendChild(option);
+    });
+    status.textContent = data.folders.length
+      ? `Loaded ${data.folders.length} folders. Choose one for Source Folder.`
+      : 'Connected successfully, but no folders were returned.';
+  } catch (err) {
+    status.textContent = 'Could not load folders right now.';
+  }
+}
+</script>
+{% endblock %}

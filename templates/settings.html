@@ -1,9 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Settings — draft.ai{% endblock %}
+{% block title %}Settings - Draft{% endblock %}
 
 {% block content %}
 <div class="page-header">
-  <h1>Settings</h1>
+  <div>
+    <h1>Settings</h1>
+    <p class="page-subtitle">Shape how drafts sound, what rules they follow, and how much lightweight local context they use.</p>
+  </div>
   <a href="/" class="btn">← Dashboard</a>
 </div>
 
@@ -42,12 +45,38 @@
       <div class="form-group">
         <label for="tone">Reply Tone</label>
         <select id="tone" name="tone">
-          {% for option in ['professional', 'friendly', 'formal', 'concise'] %}
+          {% for option in ['professional', 'friendly', 'formal', 'concise', 'warm', 'direct'] %}
           <option value="{{ option }}" {% if settings and settings.tone == option %}selected{% elif not settings and option == 'professional' %}selected{% endif %}>
             {{ option | capitalize }}
           </option>
           {% endfor %}
         </select>
+      </div>
+
+      <div class="form-group">
+        <label for="reply_length">Reply Length</label>
+        <select id="reply_length" name="reply_length">
+          {% for option in ['concise', 'normal', 'detailed'] %}
+          <option value="{{ option }}" {% if settings and settings.reply_length == option %}selected{% elif (not settings or not settings.reply_length) and option == 'normal' %}selected{% endif %}>
+            {{ option | capitalize }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group checkbox-group">
+        <label class="checkbox-label">
+          <input type="checkbox" name="lightweight_context_enabled" {% if not settings or settings.lightweight_context_enabled != False %}checked{% endif %} />
+          Use lightweight thread and contact context when drafting
+        </label>
+      </div>
+
+      <div class="form-group checkbox-group privacy-block">
+        <label class="checkbox-label">
+          <input type="checkbox" name="strict_privacy_mode" {% if settings and settings.strict_privacy_mode %}checked{% endif %} />
+          <span class="text-ai-purple">Strict privacy mode:</span> send only the current cleaned message, your saved instructions, and the minimum category label to OpenAI
+        </label>
+        <p class="form-note">This turns off conversation summaries, contact/domain summaries, and other extra context in prompts.</p>
       </div>
     </div>
 
@@ -61,6 +90,36 @@
         <textarea id="custom_instructions" name="custom_instructions"
                   rows="4"
                   placeholder="e.g. Always mention that we are available Monday to Friday 9am-5pm EST.">{{ settings.custom_instructions or '' }}</textarea>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h2>Business Context</h2>
+      <p class="section-desc">Stable context about your business, offers, and how you like replies framed.</p>
+
+      <div class="form-group">
+        <label for="business_context">Business Context</label>
+        <textarea id="business_context" name="business_context" rows="5" placeholder="e.g. We build custom software for small businesses, usually around internal tools, automation, and client portals.">{{ settings.business_context or '' }}</textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="example_phrasing">Preferred Style Examples</label>
+        <textarea id="example_phrasing" name="example_phrasing" rows="4" placeholder="Paste a few lines that sound like you so future drafts match your voice more closely.">{{ settings.example_phrasing or '' }}</textarea>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h2>Guardrails</h2>
+      <p class="section-desc">Set hard rules and fallback behavior so drafts stay safe and aligned.</p>
+
+      <div class="form-group">
+        <label for="hard_rules">Hard Rules</label>
+        <textarea id="hard_rules" name="hard_rules" rows="4" placeholder="e.g. Never promise a delivery date unless it is explicitly confirmed. Never discuss pricing unless the customer asks directly.">{{ settings.hard_rules or '' }}</textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="escalation_guidance">Escalation / Clarification Guidance</label>
+        <textarea id="escalation_guidance" name="escalation_guidance" rows="4" placeholder="e.g. If requirements are unclear, ask 1-2 clarifying questions instead of assuming details.">{{ settings.escalation_guidance or '' }}</textarea>
       </div>
     </div>
 
@@ -81,6 +140,38 @@
         <input type="url" id="footer_link" name="footer_link"
                value="{{ settings.footer_link or '' }}"
                placeholder="e.g. https://calendly.com/yourname" />
+      </div>
+    </div>
+
+    <div class="settings-section full-width">
+      <h2>Category Prompts</h2>
+      <p class="section-desc">Optional extra instructions for specific kinds of emails. These are only applied when the message is categorized into that bucket.</p>
+
+      <div class="settings-grid">
+        <div class="form-group">
+          <label for="client_prompt">Client</label>
+          <textarea id="client_prompt" name="client_prompt" rows="4" placeholder="e.g. Focus on project clarity, next steps, and confidence.">{{ settings.client_prompt or '' }}</textarea>
+        </div>
+        <div class="form-group">
+          <label for="sales_prompt">Sales</label>
+          <textarea id="sales_prompt" name="sales_prompt" rows="4" placeholder="e.g. Be persuasive but not pushy. Offer a clear next step.">{{ settings.sales_prompt or '' }}</textarea>
+        </div>
+        <div class="form-group">
+          <label for="support_prompt">Support</label>
+          <textarea id="support_prompt" name="support_prompt" rows="4" placeholder="e.g. Be calm, practical, and explicit about troubleshooting steps.">{{ settings.support_prompt or '' }}</textarea>
+        </div>
+        <div class="form-group">
+          <label for="scheduling_prompt">Scheduling</label>
+          <textarea id="scheduling_prompt" name="scheduling_prompt" rows="4" placeholder="e.g. Optimize for quick scheduling clarity and confirm the desired time zone.">{{ settings.scheduling_prompt or '' }}</textarea>
+        </div>
+        <div class="form-group">
+          <label for="billing_prompt">Billing</label>
+          <textarea id="billing_prompt" name="billing_prompt" rows="4" placeholder="e.g. Be precise and careful. Avoid confident statements if account details are missing.">{{ settings.billing_prompt or '' }}</textarea>
+        </div>
+        <div class="form-group">
+          <label for="general_prompt">General</label>
+          <textarea id="general_prompt" name="general_prompt" rows="4" placeholder="Fallback prompt guidance for uncategorized emails.">{{ settings.general_prompt or '' }}</textarea>
+        </div>
       </div>
     </div>
 
@@ -112,7 +203,10 @@ https://angelsystems.dev">{{ settings.signature or '' }}</textarea>
       <tr><th>Name</th><td>{{ settings.sender_name or '—' }}</td></tr>
       <tr><th>Company</th><td>{{ settings.company_name or '—' }}</td></tr>
       <tr><th>Tone</th><td>{{ settings.tone or 'professional' }}</td></tr>
+      <tr><th>Reply Length</th><td>{{ settings.reply_length or 'normal' }}</td></tr>
       <tr><th>Custom Instructions</th><td>{{ settings.custom_instructions or '—' }}</td></tr>
+      <tr><th>Business Context</th><td>{{ settings.business_context or '—' }}</td></tr>
+      <tr><th>Hard Rules</th><td>{{ settings.hard_rules or '—' }}</td></tr>
       <tr><th>Footer Link</th><td>
         {% if settings.footer_link %}
           {{ settings.footer_link_label or '' }} — {{ settings.footer_link }}

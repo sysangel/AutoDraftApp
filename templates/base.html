@@ -3,17 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}draft.ai{% endblock %}</title>
+  <title>{% block title %}Draft{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css" />
+  <link rel="icon" type="image/png" href="/static/brand/Draft-ui-mark.png" />
+  <link rel="icon" type="image/x-icon" href="/static/brand/Draft-icon.ico" />
 </head>
-<body>
+<body class="app-container">
   <nav class="navbar">
-    <div class="nav-brand">draft.ai</div>
+    <a href="/" class="nav-brand" aria-label="Draft home">
+      <img src="/static/brand/Draft-ui-mark.png" alt="" class="brand-mark" />
+    </a>
     <div class="nav-links">
       <a href="/">Dashboard</a>
       <a href="/messages">All Messages</a>
+      <a href="/review">Review Queue</a>
+      <a href="/insights">Insights</a>
       <a href="/settings">Settings</a>
-      <a href="/health">Health</a>
+      <a href="/configuration">Configuration</a>
+      <a href="/health/view">Health</a>
     </div>
   </nav>
 
@@ -22,7 +29,8 @@
   </main>
 
   <footer class="footer">
-    <p>draft.ai reads your inbox and creates draft replies. It never sends email.</p>
+    <p>Draft drafts replies from your inbox in a local desktop app. It never sends email.</p>
   </footer>
 </body>
 </html>
+

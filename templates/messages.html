@@ -1,44 +1,86 @@
 {% extends "base.html" %}
-{% block title %}All Messages — draft.ai{% endblock %}
+{% block title %}All Messages - Draft{% endblock %}
 
 {% block content %}
 <div class="page-header">
-  <h1>All Processed Messages</h1>
+  <div>
+    <h1>All Processed Messages</h1>
+    <p class="page-subtitle">Each message opens into a smarter module instead of a dense row. Expand an item to see the draft summary, thread memory, and the lightweight client or domain context Draft has stored locally.</p>
+  </div>
   <a href="/" class="btn">← Back to Dashboard</a>
 </div>
 
 {% if messages %}
-<table class="data-table">
-  <thead>
-    <tr>
-      <th>#</th>
-      <th>From</th>
-      <th>Subject</th>
-      <th>Received</th>
-      <th>Status</th>
-      <th>Draft</th>
-      <th>Read</th>
-      <th></th>
-    </tr>
-  </thead>
-  <tbody>
-  {% for msg in messages %}
-    <tr class="{% if msg.status == 'error' %}row-error{% endif %}">
-      <td>{{ msg.id }}</td>
-      <td>
-        <div class="small-from">{{ msg.from_name or '' }}</div>
-        <div class="small-email">{{ msg.from_email or '' }}</div>
-      </td>
-      <td>{{ msg.subject or '(no subject)' }}</td>
-      <td>{% if msg.received_at %}{{ msg.received_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}</td>
-      <td><span class="status-badge status-{{ msg.status }}">{{ msg.status }}</span></td>
-      <td>{% if msg.draft_appended %}✓{% else %}–{% endif %}</td>
-      <td>{% if msg.is_read_marked %}✓{% else %}–{% endif %}</td>
-      <td><a href="/messages/{{ msg.id }}" class="btn btn-sm">View</a></td>
-    </tr>
+<div class="smart-list">
+  {% for item in messages %}
+  {% set msg = item.message %}
+  {% set draft = item.draft %}
+  {% set contact = item.contact %}
+  {% set domain = item.domain %}
+  {% set conversation = item.conversation %}
+  <details class="smart-item" {% if loop.first %}open{% endif %}>
+    <summary class="smart-item-summary">
+      <div class="smart-item-head">
+        <div class="smart-item-title-block">
+          <div class="smart-item-title">{{ msg.subject or '(no subject)' }}</div>
+          <div class="smart-item-meta">
+            <span>{{ msg.from_name or msg.from_email or 'Unknown sender' }}</span>
+            <span>{% if msg.received_at %}{{ msg.received_at.strftime('%Y-%m-%d %H:%M') }} UTC{% endif %}</span>
+          </div>
+        </div>
+        <div class="smart-item-badges">
+          <span class="status-badge status-category">{{ msg.category or 'general' }}</span>
+          <span class="status-badge status-{{ msg.status }}">{{ msg.status }}</span>
+        </div>
+      </div>
+    </summary>
+
+    <div class="smart-item-body">
+      <div class="smart-module-grid">
+        <article class="smart-module">
+          <p class="eyebrow text-ai-blue">Summary Card</p>
+          <h3>{{ msg.from_name or msg.from_email or 'Unknown sender' }}</h3>
+          <p class="support-copy">{{ draft.draft_text[:260] if draft else (msg.cleaned_text[:260] if msg.cleaned_text else 'No cleaned body stored.') }}{% if draft and draft.draft_text|length > 260 %}...{% endif %}</p>
+          <div class="summary-line"><span>Draft appended</span><strong>{% if msg.draft_appended %}Yes{% else %}No{% endif %}</strong></div>
+          <div class="summary-line"><span>Marked read</span><strong>{% if msg.is_read_marked %}Yes{% else %}No{% endif %}</strong></div>
+        </article>
+
+        <article class="smart-module">
+          <p class="eyebrow text-ai-purple">Client Insight</p>
+          <h3>{{ contact.contact_name if contact and contact.contact_name else contact.contact_email if contact else domain.domain if domain else 'No insight yet' }}</h3>
+          <p class="support-copy">
+            {% if contact and contact.summary %}
+              {{ contact.summary }}
+            {% elif domain and domain.summary %}
+              {{ domain.summary }}
+            {% else %}
+              Draft has not stored enough local context for this sender yet.
+            {% endif %}
+          </p>
+          {% if contact and contact.common_topics %}
+          <div class="summary-line"><span>Topics</span><strong>{{ contact.common_topics }}</strong></div>
+          {% elif domain and domain.common_topics %}
+          <div class="summary-line"><span>Topics</span><strong>{{ domain.common_topics }}</strong></div>
+          {% endif %}
+        </article>
+
+        <article class="smart-module full-span">
+          <p class="eyebrow text-ai-orange">Conversation Memory</p>
+          <h3>{{ conversation.subject_root if conversation and conversation.subject_root else msg.subject or '(no subject)' }}</h3>
+          <p class="support-copy">{{ conversation.summary if conversation and conversation.summary else 'No thread summary yet.' }}</p>
+          <div class="summary-line"><span>Turns</span><strong>{{ conversation.turn_count if conversation else 1 }}</strong></div>
+          <div class="summary-line"><span>Thread key</span><strong class="mono">{{ msg.thread_key or '—' }}</strong></div>
+        </article>
+      </div>
+
+      <div class="smart-item-actions">
+        <a href="/messages/{{ msg.id }}" class="btn btn-sm">Open Full Message View</a>
+        <a href="/?focus={{ msg.id }}" class="btn btn-sm">Focus on Dashboard</a>
+      </div>
+    </div>
+  </details>
   {% endfor %}
-  </tbody>
-</table>
+</div>
 {% else %}
 <div class="empty-state">
   <p>No messages in the database yet.</p>

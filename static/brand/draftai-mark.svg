@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Draft logo">
+  <path d="M116 358 C176 342 228 310 342 232" fill="none" stroke="#78a2e3" stroke-width="24" stroke-linecap="round"/>
+  <path d="M132 392 C206 364 266 328 356 254" fill="none" stroke="#8fce63" stroke-width="28" stroke-linecap="round"/>
+  <path d="M156 426 C236 392 302 356 384 280" fill="none" stroke="#e8d57b" stroke-width="30" stroke-linecap="round"/>
+  <polygon points="188,286 292,320 424,168" fill="#eef2f7"/>
+  <polygon points="188,286 424,168 290,332 244,374 228,326" fill="#f4f7fb" stroke="#cfd8e3" stroke-width="3" stroke-linejoin="round"/>
+  <polygon points="244,374 250,316 290,332" fill="#dde5ef" stroke="#cfd8e3" stroke-width="3" stroke-linejoin="round"/>
+  <polyline points="188,286 246,328 424,168" fill="none" stroke="#cfd8e3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Review Queue - Draft{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Review Queue</h1>
+    <p class="page-subtitle">These messages were categorized with lower confidence and are waiting for a quick human check. Confirming them helps Draft build better local client preferences over time.</p>
+  </div>
+  <a href="/messages" class="btn">All Messages</a>
+</div>
+
+{% if messages %}
+<div class="smart-list">
+  {% for item in messages %}
+  {% set msg = item.message %}
+  <div class="smart-item">
+    <div class="smart-item-summary">
+      <div class="smart-item-head">
+        <div class="smart-item-title-block">
+          <div class="smart-item-title">{{ msg.subject or '(no subject)' }}</div>
+          <div class="smart-item-meta">
+            <span>{{ msg.from_name or msg.from_email or 'Unknown sender' }}</span>
+            <span>{{ '%.0f'|format((msg.category_confidence or 0) * 100) }}% confidence</span>
+          </div>
+        </div>
+        <div class="smart-item-badges">
+          <span class="status-badge status-error">Needs Review</span>
+          <span class="status-badge status-category">{{ msg.category or 'general' }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="smart-item-body">
+      <div class="smart-module-grid">
+        <article class="smart-module">
+          <p class="eyebrow text-ai-blue">Why it matters</p>
+          <p class="support-copy">{{ item.conversation.summary if item.conversation and item.conversation.summary else (msg.cleaned_text[:240] if msg.cleaned_text else 'No cleaned text available.') }}</p>
+        </article>
+        <article class="smart-module">
+          <p class="eyebrow text-ai-purple">Confirm category</p>
+          <form method="POST" action="/messages/{{ msg.id }}/category" class="feedback-form">
+            <select name="category">
+              {% for option in ['general', 'client', 'sales', 'support', 'scheduling', 'billing'] %}
+              <option value="{{ option }}" {% if (msg.manual_category or msg.category) == option %}selected{% endif %}>{{ option|capitalize }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary btn-sm">Confirm</button>
+          </form>
+        </article>
+      </div>
+      <div class="smart-item-actions">
+        <a href="/messages/{{ msg.id }}" class="btn btn-sm">Open Full Message</a>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <p>No low-confidence categorizations are waiting for review.</p>
+</div>
+{% endif %}
+{% endblock %}

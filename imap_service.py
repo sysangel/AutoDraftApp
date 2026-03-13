@@ -45,16 +45,44 @@ def close_connection(conn: imaplib.IMAP4_SSL):
         pass
 
 
+def list_mailboxes(conn: imaplib.IMAP4_SSL) -> list[str]:
+    """Return a best-effort list of IMAP folder names available for this account."""
+    status, data = conn.list()
+    if status != "OK" or not data:
+        return []
+
+    folders = []
+    for row in data:
+        decoded = row.decode(errors="replace") if isinstance(row, bytes) else str(row)
+        if ' "/" ' in decoded:
+            folder = decoded.rsplit(' "/" ', 1)[-1].strip().strip('"')
+        else:
+            folder = decoded.split()[-1].strip().strip('"')
+        if folder:
+            folders.append(folder)
+
+    ordered = []
+    seen = set()
+    for folder in folders:
+        if folder in seen:
+            continue
+        seen.add(folder)
+        ordered.append(folder)
+    return ordered
+
+
 # ---------------------------------------------------------------------------
 # Fetch unread messages
 # ---------------------------------------------------------------------------
 
-def fetch_unread_uids(conn: imaplib.IMAP4_SSL) -> list[str]:
+def fetch_unread_uids(conn: imaplib.IMAP4_SSL, source_folder: str = "INBOX") -> list[str]:
     """
-    Select INBOX and return a list of UIDs for unread (UNSEEN) messages.
+    Select the configured source folder and return a list of unread (UNSEEN) message UIDs.
     Returns an empty list if none found.
     """
-    conn.select("INBOX")
+    status, _ = conn.select(source_folder)
+    if status != "OK":
+        raise RuntimeError(f"Could not open IMAP folder '{source_folder}'.")
     status, data = conn.uid("SEARCH", None, "UNSEEN")
     if status != "OK" or not data or not data[0]:
         return []
@@ -151,7 +179,7 @@ def parse_message(raw_bytes: bytes, uid: str) -> dict:
     """
     Parse raw email bytes into a dict with the fields we care about.
     Returns a dict with keys: message_id, from_email, from_name,
-    subject, received_at, body_text.
+    subject, received_at, body_text, in_reply_to, references_header.
     """
     msg = email.message_from_bytes(raw_bytes)
 
@@ -171,10 +199,14 @@ def parse_message(raw_bytes: bytes, uid: str) -> dict:
             received_at = datetime.utcnow()
 
     body_text = extract_body(msg)
+    in_reply_to = decode_header_value(msg.get("In-Reply-To", "")).strip()
+    references_header = decode_header_value(msg.get("References", "")).strip()
 
     return {
         "uid": uid,
         "message_id": message_id,
+        "in_reply_to": in_reply_to,
+        "references_header": references_header,
         "from_email": from_email,
         "from_name": from_name,
         "subject": subject,
@@ -313,6 +345,7 @@ def poll_mailbox(
     imap_port: int,
     username: str,
     password: str,
+    source_folder: str,
     drafts_folder: str,
     known_message_ids: set,
 ) -> list[dict]:
@@ -328,7 +361,7 @@ def poll_mailbox(
       received_at, body_text, _conn (IMAP connection — keep open for appending)
     """
     conn = get_imap_connection(imap_host, imap_port, username, password)
-    uids = fetch_unread_uids(conn)
+    uids = fetch_unread_uids(conn, source_folder=source_folder or "INBOX")
     results = []
 
     for uid in uids:

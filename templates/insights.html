@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Insights - Draft{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Insights</h1>
+    <p class="page-subtitle">This is the lightweight local context Draft has gathered to improve replies. Only compact summaries, categories, and short recent-history snippets are used for drafting, and everything stays local except the bounded prompt context sent when a draft is generated.</p>
+  </div>
+  <a href="/settings" class="btn">Tune Prompt Settings</a>
+</div>
+
+<div class="health-grid">
+  <section class="health-card">
+    <span class="health-label">Known Contacts</span>
+    <div class="health-value">{{ top_contacts | length }}</div>
+  </section>
+  <section class="health-card">
+    <span class="health-label">Known Domains</span>
+    <div class="health-value">{{ top_domains | length }}</div>
+  </section>
+  <section class="health-card">
+    <span class="health-label">Tracked Conversations</span>
+    <div class="health-value">{{ recent_conversations | length }}</div>
+  </section>
+</div>
+
+<div class="settings-grid">
+  <section class="settings-section">
+    <h2>Top Contacts</h2>
+    <p class="section-desc">Per-sender summaries and common topics kept locally on this machine.</p>
+    {% if top_contacts %}
+      {% for item in top_contacts %}
+      <div class="insight-item">
+        <div class="insight-title">{{ item.contact_name or item.contact_email }}</div>
+        <div class="small-email">{{ item.contact_email }}</div>
+        <div class="insight-meta">Category: {{ item.category_hint }} | Messages: {{ item.message_count }}</div>
+        <p class="insight-body">{{ item.summary or 'No summary yet.' }}</p>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="small-text">No contact insight data yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="settings-section">
+    <h2>Top Domains</h2>
+    <p class="section-desc">A high-level local view of what each sender domain usually contacts you about.</p>
+    {% if top_domains %}
+      {% for item in top_domains %}
+      <div class="insight-item">
+        <div class="insight-title">{{ item.domain }}</div>
+        <div class="insight-meta">Top category: {{ item.top_category }} | Messages: {{ item.message_count }}</div>
+        <p class="insight-body">{{ item.summary or 'No summary yet.' }}</p>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="small-text">No domain insight data yet.</p>
+    {% endif %}
+  </section>
+</div>
+
+<section class="settings-section full-width">
+  <h2>Recent Conversations</h2>
+  <p class="section-desc">Conversation memory stays intentionally small: a rolling summary, last inbound, category, and recent locally-generated drafts.</p>
+  {% if recent_conversations %}
+    {% for item in recent_conversations %}
+    <div class="insight-item">
+      <div class="insight-title">{{ item.subject_root or '(no subject)' }}</div>
+      <div class="insight-meta">{{ item.participant_email or 'Unknown sender' }} | {{ item.category }} | Turns: {{ item.turn_count }}</div>
+      <p class="insight-body">{{ item.summary or 'No summary yet.' }}</p>
+    </div>
+    {% endfor %}
+  {% else %}
+    <p class="small-text">No conversation memory stored yet.</p>
+  {% endif %}
+</section>
+{% endblock %}
